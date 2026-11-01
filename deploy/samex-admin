@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Administration du CRM sur le serveur.
+#   sudo samex-admin list-users
+#   sudo samex-admin create-supervisor
+#   sudo samex-admin reset-password <identifiant>
+#   sudo samex-admin status | logs | restart
+set -euo pipefail
+ENV_FILE=/etc/samex-crm/samex-crm.env
+APP=/opt/samex-crm/current
+[ "$(id -u)" -eq 0 ] || { echo "Utilisez : sudo samex-admin $*"; exit 1; }
+set -a; . "$ENV_FILE"; set +a
+
+run_cli() { runuser -u samex -- env NODE_ENV="$NODE_ENV" DATA_DIR="$DATA_DIR" PORT="$PORT" node "$APP/scripts/admin.js" "$@"; }
+
+case "${1:-}" in
+  list-users) run_cli list-users ;;
+  create-supervisor|reset-password)
+    echo "Arrêt du CRM pendant l'opération (quelques secondes)..."
+    systemctl stop samex-crm
+    trap 'systemctl start samex-crm; echo "CRM relancé."' EXIT
+    run_cli "$@"
+    ;;
+  status)
+    systemctl --no-pager status samex-crm | head -5
+    curl -fsS "http://127.0.0.1:$PORT/api/health" && echo
+    systemctl list-timers samex-backup.timer --no-pager | head -2
+    ;;
+  logs) journalctl -u samex-crm -n 100 --no-pager ;;
+  restart) systemctl restart samex-crm && echo "CRM redémarré." ;;
+  *) echo "Commandes : list-users | create-supervisor | reset-password <identifiant> | status | logs | restart"; exit 1 ;;
+esac

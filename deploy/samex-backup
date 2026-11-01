@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Sauvegarde de la base CRM (lancée chaque nuit par samex-backup.timer, ou à la main : sudo samex-backup).
+# La base est écrite de façon atomique : la copie est toujours cohérente, même service en marche.
+set -euo pipefail
+DATA_DIR="${DATA_DIR:-/var/lib/samex-crm}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/samex-crm}"
+KEEP_DAYS="${KEEP_DAYS:-30}"
+umask 077
+mkdir -p "$BACKUP_DIR"
+[ -f "$DATA_DIR/samex-db.json" ] || { echo "Aucune base à sauvegarder ($DATA_DIR/samex-db.json absent)."; exit 0; }
+STAMP=$(date +%Y%m%d-%H%M%S)
+OUT="$BACKUP_DIR/samex-crm-$STAMP.tar.gz"
+tar -C "$DATA_DIR" -czf "$OUT.tmp" samex-db.json
+tar -tzf "$OUT.tmp" >/dev/null   # vérifie que l'archive est lisible
+mv "$OUT.tmp" "$OUT"
+chmod 600 "$OUT"
+find "$BACKUP_DIR" -maxdepth 1 -name 'samex-crm-*.tar.gz' -mtime +"$KEEP_DAYS" -delete
+echo "Sauvegarde créée : $OUT ($(du -h "$OUT" | cut -f1))"

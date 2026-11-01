@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Restaure une sauvegarde serveur.
+#   sudo samex-restore                 → liste les sauvegardes disponibles
+#   sudo samex-restore <fichier.tar.gz> → restaure (une sauvegarde de sécurité de l'état actuel est faite avant)
+set -euo pipefail
+DATA_DIR="${DATA_DIR:-/var/lib/samex-crm}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/samex-crm}"
+SERVICE="${SERVICE:-samex-crm}"
+NO_SYSTEMD="${NO_SYSTEMD:-}"
+
+if [ -z "${1:-}" ]; then
+  echo "Sauvegardes disponibles (les plus récentes en bas) :"
+  ls -1tr "$BACKUP_DIR"/samex-crm-*.tar.gz 2>/dev/null || echo "  (aucune)"
+  echo; echo "Pour restaurer : sudo samex-restore <chemin du fichier>"
+  exit 0
+fi
+FILE="$1"; [ -f "$FILE" ] || FILE="$BACKUP_DIR/$1"
+[ -f "$FILE" ] || { echo "Fichier introuvable : $1"; exit 1; }
+tar -tzf "$FILE" | grep -qx 'samex-db.json' || { echo "Ce fichier n'est pas une sauvegarde SAME X valide."; exit 1; }
+
+read -r -p "Restaurer $FILE ? Les données actuelles seront remplacées (une copie de sécurité est faite). Tapez OUI : " ANSWER
+[ "$ANSWER" = "OUI" ] || { echo "Annulé."; exit 1; }
+
+echo "Copie de sécurité de l'état actuel :"
+DATA_DIR="$DATA_DIR" BACKUP_DIR="$BACKUP_DIR" "$(dirname "$0")/samex-backup"
+[ -n "$NO_SYSTEMD" ] || systemctl stop "$SERVICE"
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+tar -C "$TMP" -xzf "$FILE" samex-db.json
+node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(!Array.isArray(d.users)||!Array.isArray(d.leads)) process.exit(1)' "$TMP/samex-db.json" \
+  || { [ -n "$NO_SYSTEMD" ] || systemctl start "$SERVICE"; echo "Contenu invalide, restauration annulée."; exit 1; }
+install -m 600 "$TMP/samex-db.json" "$DATA_DIR/samex-db.json"
+[ -n "$NO_SYSTEMD" ] || chown samex:samex "$DATA_DIR/samex-db.json"
+[ -n "$NO_SYSTEMD" ] || systemctl start "$SERVICE"
+echo "Restauration terminée. Les utilisateurs doivent se reconnecter."
