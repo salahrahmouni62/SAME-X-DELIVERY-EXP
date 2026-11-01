@@ -1,0 +1,9 @@
+{
+  "name": "SAME X DELIVERY — CRM Expéditeurs",
+  "short_name": "SAME X",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#111111",
+  "icons": [{ "src": "/logo-mark.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

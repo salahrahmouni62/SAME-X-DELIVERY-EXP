@@ -10,7 +10,8 @@
     "dev": "node server.js",
     "test": "node test/api.test.js",
     "test:redis": "node test/redis.test.js",
-    "check:vercel": "node test/vercel-check.js"
+    "check:vercel": "node test/vercel-check.js",
+    "check": "node test/vercel-check.js && node test/api.test.js && node test/prod.test.js && node test/redis.test.js"
   },
   "license": "UNLICENSED"
 }

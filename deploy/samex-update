@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Met à jour le CRM avec une nouvelle version, sans toucher aux données.
+#   sudo samex-update /root/samex-delivery-crm.zip
+# Sauvegarde avant, retour automatique à l'ancienne version si la nouvelle ne démarre pas.
+set -euo pipefail
+ZIP="${1:-}"
+APP_ROOT=/opt/samex-crm
+[ "$(id -u)" -eq 0 ] || { echo "Utilisez : sudo samex-update <fichier.zip>"; exit 1; }
+[ -f "$ZIP" ] || { echo "Usage : sudo samex-update /root/samex-delivery-crm.zip"; exit 1; }
+
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+python3 -m zipfile -e "$ZIP" "$TMP"
+FOUND=$(find "$TMP" -maxdepth 3 -name server.js -path '*samex*' | head -1)
+# Never fall back to the current directory: an archive without the app must be refused
+[ -n "$FOUND" ] && [ -f "$FOUND" ] || { echo "Archive invalide (server.js introuvable)."; exit 1; }
+SRC=$(dirname "$FOUND")
+( cd "$SRC" && for f in server.js lib/*.js public/app.js scripts/admin.js; do node --check "$f" || { echo "Fichier invalide : $f"; exit 1; }; done )
+
+echo "▶ Sauvegarde avant mise à jour"; samex-backup
+PREV=$(readlink -f "$APP_ROOT/current")
+NEW="$APP_ROOT/releases/$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$NEW" && cp -a "$SRC/." "$NEW/" && rm -rf "$NEW/data" "$NEW/test"
+chown -R root:root "$NEW"; chmod -R go-w "$NEW"
+install -m 755 "$NEW/deploy/samex-admin" /usr/local/bin/samex-admin
+install -m 755 "$NEW/deploy/samex-backup" /usr/local/bin/samex-backup
+install -m 755 "$NEW/deploy/samex-restore" /usr/local/bin/samex-restore
+install -m 755 "$NEW/deploy/samex-update" /usr/local/bin/samex-update
+
+echo "▶ Activation de la nouvelle version"
+ln -sfn "$NEW" "$APP_ROOT/current"
+systemctl restart samex-crm
+# The NEW release must be the one answering, and still be healthy a few seconds later (no crash loop)
+new_is_up() { curl -fsS http://127.0.0.1:3000/api/health 2>/dev/null | grep -q "\"release\":\"$(basename "$NEW")\""; }
+UP=0
+for i in $(seq 1 20); do new_is_up && { UP=1; break; }; sleep 1; done
+if [ "$UP" = 1 ]; then sleep 5; new_is_up || UP=0; fi
+if [ "$UP" != 1 ]; then
+  echo "✘ La nouvelle version ne démarre pas : retour à la version précédente."
+  ln -sfn "$PREV" "$APP_ROOT/current"; systemctl restart samex-crm
+  journalctl -u samex-crm -n 20 --no-pager; exit 1
+fi
+# Conserve les 3 dernières versions
+ls -1dt "$APP_ROOT"/releases/* | tail -n +4 | xargs -r rm -rf
+echo "✔ Mise à jour terminée : $(basename "$NEW"). Données conservées."
