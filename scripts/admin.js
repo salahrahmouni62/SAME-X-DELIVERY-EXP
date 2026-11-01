@@ -48,7 +48,7 @@ async function askPassword() {
     console.log('Usage : samex-admin create-supervisor | reset-password <identifiant> | list-users');
     process.exit(1);
   }
-  if (db.MODE === 'unconfigured') { console.error('✘ Base non configurée (variables Redis manquantes).'); process.exit(4); }
+  if (db.MODE === 'unconfigured') { console.error('✘ Base non configurée (variables Redis manquantes ou invalides).\n' + db.describe()); process.exit(4); }
   if (db.MODE === 'file' && cmd !== 'list-users' && await serverRunning()) {
     console.error('✘ Le service CRM tourne encore. Utilisez la commande « sudo samex-admin ... » (elle l’arrête et le relance automatiquement).');
     process.exit(2);

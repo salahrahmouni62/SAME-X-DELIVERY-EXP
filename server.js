@@ -10,6 +10,7 @@ const auth = require('./lib/auth');
 const L = require('./lib/leads');
 const C = require('./lib/constants');
 const files = require('./lib/files');
+const redis = require('./lib/redis');
 
 const PORT = Number(process.env.PORT || 3000);
 const PUBLIC = path.join(__dirname, 'public');
@@ -172,7 +173,23 @@ const route = (method, pattern, handler, opts = {}) => {
 /* --- setup & auth --- */
 route('GET', '/api/setup-status', () => ({ needsSetup: db.col('users').length === 0, tokenRequired: !!SETUP_TOKEN || IS_PROD, locked: IS_PROD && !SETUP_TOKEN }));
 const RELEASE = (() => { try { return path.basename(fs.realpathSync(__dirname)); } catch { return ''; } })();
-route('GET', '/api/health', () => ({ ok: true, release: RELEASE, uptime: Math.round(process.uptime()), time: new Date().toISOString() }));
+/* Health check, answered WITHOUT loading the database so it still works when storage is broken. It says which storage
+ * is used and, in Redis mode, whether Upstash answers. Only variable NAMES are shown, never their values. */
+route('GET', '/api/health', async () => {
+  const storage = { mode: db.MODE };
+  let ok = true;
+  if (db.MODE === 'redis') {
+    const r = redis.status(); storage.variables = r.source;
+    const p = await redis.ping(); storage.reachable = p.ok;
+    if (p.ok) storage.latencyMs = p.ms; else { ok = false; storage.error = p.error; storage.problem = p.message; }
+  } else if (db.MODE === 'unconfigured') {
+    const r = redis.status(); ok = false;
+    storage.error = 'storage_not_configured'; storage.problems = r.problems;
+  }
+  const body = { ok, release: RELEASE, uptime: Math.round(process.uptime()), time: new Date().toISOString(), storage };
+  if (process.env.VERCEL) body.deployment = { environment: process.env.VERCEL_ENV || '', commit: String(process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7), region: process.env.VERCEL_REGION || '' };
+  return ok ? body : { status: 503, body };
+}, { noDb: true });
 
 const setupAttempts = { count: 0, until: 0 };
 route('POST', '/api/setup', async (req, res, { body }) => {
@@ -508,6 +525,7 @@ function serveFile(res, file) {
 }
 
 /* ---------------- server ---------------- */
+const STORAGE_ERRORS = new Set(['storage_not_configured', 'storage_unavailable', 'storage_auth', 'write_conflict']);
 const handler = async (req, res) => {
   const url = new URL(req.url, 'http://local');
   const pathname = decodeURIComponent(url.pathname);
@@ -519,7 +537,7 @@ const handler = async (req, res) => {
     const m = pathname.match(r.re);
     const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
     const body = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) ? await readBody(req, r.opts.big ? MAX_BIG_BODY : MAX_BODY) : {};
-    const out = await db.transaction(async () => {
+    const out = r.opts.noDb ? await r.handler(req, res, { params, body, user: null, query: Object.fromEntries(url.searchParams) }) : await db.transaction(async () => {
       if (db.dailyMaintenanceDue()) { auth.pruneSessions(); await db.snapshot('auto'); }
       const user = r.opts.auth ? requireUser(req) : null;
       return r.handler(req, res, { params, body, user, query: Object.fromEntries(url.searchParams) });
@@ -529,6 +547,12 @@ const handler = async (req, res) => {
     return send(res, 200, out === undefined ? { ok: true } : out);
   } catch (e) {
     if (e instanceof HttpError) return send(res, e.status, { error: e.code, ...(e.extra || {}) }, e.status === 429 && e.extra ? { 'Retry-After': String(e.extra.retryAfter) } : {});
+    /* Storage problems are configuration / availability issues, not bugs: answer 503 with a precise code (and, for a
+     * missing configuration, the list of problems — variable names only) so the screen and the logs say what to fix. */
+    if (STORAGE_ERRORS.has(e && e.code)) {
+      console.error('[api]', req.method, pathname, `${e.code}: ${e.message}` + (e.detected ? ` | variables liées visibles : ${e.detected.join(', ') || 'aucune'}` : ''));
+      return send(res, 503, { error: e.code, ...(e.code === 'storage_not_configured' ? { problems: e.problems || [] } : {}) }, { 'Retry-After': '30' });
+    }
     console.error('[api]', req.method, pathname, e);
     return send(res, 500, { error: 'server_error' });
   }

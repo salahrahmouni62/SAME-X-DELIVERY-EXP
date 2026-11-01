@@ -26,7 +26,7 @@ async function startServer(port, extra = {}, probe = '/api/health') {
     SETUP_TOKEN: SETUP, KV_REST_API_URL: `http://127.0.0.1:${RPORT}`, KV_REST_API_TOKEN: RTOKEN, ...extra };
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
   const p = spawn(process.execPath, [path.join(ROOT, 'server.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-  p.logs = ''; p.stderr.on('data', (d) => (p.logs += d));
+  p.logs = ''; p.stderr.on('data', (d) => (p.logs += d)); p.stdout.on('data', (d) => (p.logs += d));
   procs.push(p);
   for (let i = 0; i < 50; i++) { try { if ((await fetch(`http://127.0.0.1:${port}${probe}`)).ok) return p; } catch {} await sleep(100); }
   throw new Error('server did not start\n' + p.logs);
@@ -106,7 +106,9 @@ function client(port) {
     await C.call('POST', '/api/login', { username: 'boss', password: 'Samex2026x' }, { 'X-Real-IP': '10.0.0.81' });
     redis.stdin.write('down\n'); await sleep(100);
     const r = await C.call('POST', '/api/leads', { storeName: 'Pendant la panne' }, { 'X-Real-IP': '10.0.0.81' });
-    assert.strictEqual(r.status, 500); assert.strictEqual(r.data.error, 'server_error');
+    assert.strictEqual(r.status, 503); assert.strictEqual(r.data.error, 'storage_unavailable');
+    const h = await fetch(`http://127.0.0.1:${PORTS[0]}/api/health`);
+    assert.strictEqual(h.status, 503); assert.strictEqual((await h.json()).storage.reachable, false);
     redis.stdin.write('up\n'); await sleep(100);
     const list = (await C.call('GET', '/api/leads', null, { 'X-Real-IP': '10.0.0.81' })).data;
     assert.strictEqual(list.total, 41, 'the failed write was not half-applied');
@@ -115,21 +117,73 @@ function client(port) {
 
   await test('wrong Redis token → API error, pages still served, token never shown to the browser', async () => {
     await startServer(PORTS[2], { KV_REST_API_TOKEN: 'bad-token' }, '/');
-    assert.strictEqual((await fetch(`http://127.0.0.1:${PORTS[2]}/api/health`)).status, 500, 'health reports the storage failure');
+    const h = await fetch(`http://127.0.0.1:${PORTS[2]}/api/health`);
+    assert.strictEqual(h.status, 503, 'health reports the storage failure');
+    const hb = await h.json();
+    assert.strictEqual(hb.storage.error, 'storage_auth'); assert(!JSON.stringify(hb).includes('bad-token'));
     const page = await fetch(`http://127.0.0.1:${PORTS[2]}/`);
     assert.strictEqual(page.status, 200);
     const r = await client(PORTS[2]).call('GET', '/api/setup-status');
-    assert.strictEqual(r.status, 500);
+    assert.strictEqual(r.status, 503); assert.strictEqual(r.data.error, 'storage_auth');
     assert(!JSON.stringify(r.data).includes('bad-token'));
   });
 
   await test('on Vercel without Redis variables: clear log message, pages served, no disk write', async () => {
     const p = await startServer(PORTS[2] + 1, { VERCEL: '1', KV_REST_API_URL: undefined, KV_REST_API_TOKEN: undefined }, '/');
     assert.strictEqual((await fetch(`http://127.0.0.1:${PORTS[2] + 1}/`)).status, 200);
-    assert.strictEqual((await client(PORTS[2] + 1).call('GET', '/api/setup-status')).status, 500);
+    const r = await client(PORTS[2] + 1).call('GET', '/api/setup-status');
+    assert.strictEqual(r.status, 503); assert.strictEqual(r.data.error, 'storage_not_configured');
+    assert(r.data.problems.length && /KV_REST_API_URL/.test(r.data.problems[0]), JSON.stringify(r.data));
+    const h = await fetch(`http://127.0.0.1:${PORTS[2] + 1}/api/health`);
+    assert.strictEqual(h.status, 503); assert.strictEqual((await h.json()).storage.mode, 'unconfigured');
     await sleep(100);
     assert(/KV_REST_API_URL/.test(p.logs), p.logs);
+    assert(/Variables liées visibles par la fonction : aucune/.test(p.logs), 'log lists the related variable names the function can see');
     assert.deepStrictEqual(fs.readdirSync(EMPTY_DIR), []);
+  });
+
+  await test('health in Redis mode: Upstash reachable, variable names shown, secret values never shown', async () => {
+    const h = await fetch(`http://127.0.0.1:${PORTS[0]}/api/health`);
+    assert.strictEqual(h.status, 200);
+    const b = await h.json(); const txt = JSON.stringify(b);
+    assert.strictEqual(b.storage.mode, 'redis'); assert.strictEqual(b.storage.reachable, true);
+    assert.deepStrictEqual(b.storage.variables, { url: 'KV_REST_API_URL', token: 'KV_REST_API_TOKEN' });
+    assert(!txt.includes(RTOKEN) && !txt.includes(String(RPORT)), 'neither the token nor the Redis URL is exposed');
+  });
+
+  await test('on Vercel with prefixed variables (Custom Prefix, e.g. STORAGE_KV_REST_API_*): uses Redis, same data', async () => {
+    const port = PORTS[2] + 2;
+    const p = await startServer(port, { VERCEL: '1', VERCEL_ENV: 'production', KV_REST_API_URL: undefined, KV_REST_API_TOKEN: undefined,
+      STORAGE_KV_REST_API_URL: `http://127.0.0.1:${RPORT}/`, STORAGE_KV_REST_API_TOKEN: RTOKEN, STORAGE_KV_REST_API_READ_ONLY_TOKEN: 'read-only-must-not-be-used' });
+    const C = client(port);
+    const st = await C.call('GET', '/api/setup-status');
+    assert.strictEqual(st.status, 200, JSON.stringify(st.data)); assert.strictEqual(st.data.needsSetup, false, 'sees the existing database');
+    assert.strictEqual((await C.call('POST', '/api/login', { username: 'boss', password: 'Samex2026x' }, { 'X-Real-IP': '10.0.0.82' })).status, 200);
+    assert.strictEqual((await C.call('GET', '/api/leads', null, { 'X-Real-IP': '10.0.0.82' })).data.total, 42);
+    const h = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
+    assert.deepStrictEqual(h.storage.variables, { url: 'STORAGE_KV_REST_API_URL', token: 'STORAGE_KV_REST_API_TOKEN' });
+    assert.strictEqual(h.deployment.environment, 'production');
+    assert(/Upstash Redis \(STORAGE_KV_REST_API_URL/.test(p.logs + ''), 'cold-start log names the variables in use');
+    assert.deepStrictEqual(fs.readdirSync(EMPTY_DIR), []);
+  });
+
+  await test('on Vercel with UPSTASH_REDIS_REST_* names and values pasted with quotes/spaces: works', async () => {
+    const port = PORTS[2] + 3;
+    await startServer(port, { VERCEL: '1', KV_REST_API_URL: undefined, KV_REST_API_TOKEN: undefined,
+      UPSTASH_REDIS_REST_URL: ` "http://127.0.0.1:${RPORT}" `, UPSTASH_REDIS_REST_TOKEN: `'${RTOKEN}'\n` });
+    const st = await client(port).call('GET', '/api/setup-status');
+    assert.strictEqual(st.status, 200, JSON.stringify(st.data));
+  });
+
+  await test('on Vercel with only a TCP URL (REDIS_URL) or a half pair: 503 with a precise diagnostic', async () => {
+    const a = PORTS[2] + 4, b = PORTS[2] + 5;
+    await startServer(a, { VERCEL: '1', KV_REST_API_URL: undefined, KV_REST_API_TOKEN: undefined, REDIS_URL: 'rediss://default:secret-pass@x.upstash.io:6379' }, '/');
+    const r1 = await client(a).call('GET', '/api/setup-status');
+    assert.strictEqual(r1.status, 503); assert(/REDIS_URL/.test(r1.data.problems.join(' ')) && /REST/.test(r1.data.problems.join(' ')), JSON.stringify(r1.data));
+    assert(!JSON.stringify(r1.data).includes('secret-pass'));
+    await startServer(b, { VERCEL: '1', KV_REST_API_TOKEN: undefined }, '/');
+    const r2 = await client(b).call('GET', '/api/setup-status');
+    assert.strictEqual(r2.status, 503); assert(/KV_REST_API_TOKEN est absent ou vide/.test(r2.data.problems.join(' ')), JSON.stringify(r2.data));
   });
 
   await test('api/index.js (Vercel entry) works with NODEJS_HELPERS on (pre-parsed body) and off', async () => {
@@ -153,7 +207,7 @@ function client(port) {
       let s = ''; p.stdout.on('data', (d) => (s += d)); p.stderr.on('data', (d) => (s += d));
       p.on('exit', () => resolve(s)); setTimeout(() => { p.kill(); reject(new Error('timeout: ' + s)); }, 15000);
     });
-    const lines = o.trim().split('\n');
+    const lines = o.trim().split('\n').filter((l) => !l.startsWith('[db]'));
     assert.strictEqual(lines.length, 2, o);
     for (const l of lines) assert(/^200 .*"username":"boss"/.test(l), o);
   });

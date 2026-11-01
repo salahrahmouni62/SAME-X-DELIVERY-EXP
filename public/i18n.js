@@ -83,7 +83,9 @@ window.SAMEX_I18N = {
     err_store_name_required: 'Le nom de la boutique est obligatoire.', err_wrong_current_password: 'Mot de passe actuel incorrect.', err_backup_invalid: 'Fichier de sauvegarde invalide.',
     err_backup_no_supervisor: 'La sauvegarde ne contient aucun superviseur actif.', err_import_format: 'Format non reconnu.', err_payload_too_large: 'Fichier trop volumineux.',
     err_invalid_owner: 'Agent introuvable ou désactivé.', err_agency_inactive: 'L’agence de cet agent est désactivée.', err_note_required: 'Écrivez un compte rendu.',
-    err_name_required: 'Le nom est obligatoire.', err_network: 'Serveur injoignable. Vérifiez votre connexion.', err_generic: 'Une erreur est survenue.', err_invalid_json: 'Fichier JSON invalide.',
+    err_name_required: 'Le nom est obligatoire.',
+    err_storage_not_configured: 'Base de données non configurée sur le serveur (Upstash Redis). L’administrateur doit vérifier les variables KV_REST_API_URL et KV_REST_API_TOKEN dans Vercel, puis redéployer. Détails : /api/health',
+    err_storage_unavailable: 'Base de données momentanément injoignable. Réessayez dans un instant.', err_storage_auth: 'Accès à la base de données refusé (jeton Redis invalide). Contactez l’administrateur.', err_write_conflict: 'Trop de modifications simultanées. Réessayez.', err_network: 'Serveur injoignable. Vérifiez votre connexion.', err_generic: 'Une erreur est survenue.', err_invalid_json: 'Fichier JSON invalide.',
   },
   ar: {
     appTagline: 'نظام إدارة واستقطاب المرسلين — الجزائر',
@@ -143,7 +145,9 @@ window.SAMEX_I18N = {
     err_cannot_disable_self: 'لا يمكنك تعطيل حسابك.', err_agency_name_required: 'اسم الوكالة إلزامي.', err_agency_wilaya_required: 'اختر الولاية الرئيسية.', err_agency_code_taken: 'رمز الوكالة موجود.',
     err_store_name_required: 'اسم المتجر إلزامي.', err_wrong_current_password: 'كلمة المرور الحالية غير صحيحة.', err_backup_invalid: 'ملف نسخة احتياطية غير صالح.',
     err_backup_no_supervisor: 'النسخة لا تحتوي على مشرف نشط.', err_import_format: 'صيغة غير معروفة.', err_payload_too_large: 'الملف كبير جداً.', err_invalid_owner: 'العون غير موجود أو معطل.',
-    err_agency_inactive: 'وكالة هذا العون معطلة.', err_note_required: 'اكتب ملخصاً.', err_name_required: 'الاسم إلزامي.', err_network: 'تعذر الاتصال بالخادم.', err_generic: 'حدث خطأ.',
+    err_agency_inactive: 'وكالة هذا العون معطلة.', err_note_required: 'اكتب ملخصاً.', err_name_required: 'الاسم إلزامي.',
+    err_storage_not_configured: 'قاعدة البيانات غير مهيأة على الخادم (Upstash Redis). على المسؤول التحقق من المتغيرين KV_REST_API_URL و KV_REST_API_TOKEN في Vercel ثم إعادة النشر. التفاصيل: /api/health',
+    err_storage_unavailable: 'تعذر الوصول إلى قاعدة البيانات مؤقتاً. أعد المحاولة بعد لحظات.', err_storage_auth: 'رُفض الوصول إلى قاعدة البيانات (رمز Redis غير صالح). اتصل بالمسؤول.', err_write_conflict: 'تعديلات متزامنة كثيرة. أعد المحاولة.', err_network: 'تعذر الاتصال بالخادم.', err_generic: 'حدث خطأ.',
     err_invalid_json: 'ملف JSON غير صالح.',
   },
   // Value labels
