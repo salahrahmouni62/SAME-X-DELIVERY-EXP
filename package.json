@@ -1,0 +1,16 @@
+{
+  "name": "samex-delivery-crm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SAME X DELIVERY — CRM de prospection et d'acquisition d'expéditeurs e-commerce en Algérie",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test/api.test.js",
+    "test:redis": "node test/redis.test.js",
+    "check:vercel": "node test/vercel-check.js"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "framework": null,
+  "regions": [
+    "fra1"
+  ],
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{public,lib}/**"
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/api/index"
+    }
+  ]
+}

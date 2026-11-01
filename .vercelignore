@@ -1,0 +1,6 @@
+data/
+deploy/
+test/
+Dockerfile
+*.md
+.env*
