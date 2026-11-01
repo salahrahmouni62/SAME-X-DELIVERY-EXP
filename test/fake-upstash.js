@@ -14,6 +14,7 @@ const zsorted = (k) => [...(zsets.get(k) || new Map())].sort((x, y) => x[1] - y[
 
 function run([c, ...a]) {
   switch (c.toUpperCase()) {
+    case 'PING': return 'PONG';
     case 'GET': return kv.has(a[0]) ? kv.get(a[0]) : null;
     case 'SET': kv.set(a[0], a[1]); return 'OK';
     case 'MGET': return a.map((k) => (kv.has(k) ? kv.get(k) : null));

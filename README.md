@@ -65,6 +65,10 @@ Docker : `docker run -p 127.0.0.1:3000:3000 -v samex-data:/app/data -e SETUP_TOK
 
 Vercel n'a pas de disque durable : dès que `KV_REST_API_URL` et `KV_REST_API_TOKEN` (ou `UPSTASH_REDIS_REST_URL` / `_TOKEN`) sont définis, la base, les instantanés et le blocage des connexions passent dans Redis. Sans ces variables, rien ne change (fichier JSON).
 
+Noms acceptés, dans cet ordre : `KV_REST_API_URL` + `KV_REST_API_TOKEN`, puis `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`, puis les mêmes noms précédés d'un préfixe (par exemple `STORAGE_KV_REST_API_URL`, quand la base a été connectée avec un *Custom Prefix*). Si plusieurs bases préfixées existent, `REDIS_ENV_PREFIX=STORAGE` choisit laquelle. Le jeton en lecture seule n'est jamais utilisé. Les valeurs collées avec des guillemets ou des espaces sont nettoyées.
+
+**Diagnostic :** `GET /api/health` répond sans lire la base. Il indique le mode de stockage (`redis`, `file` ou `unconfigured`), les **noms** des variables utilisées (jamais leurs valeurs), si Upstash répond, ainsi que l'environnement et le commit du déploiement. Un problème de stockage renvoie `503` avec un code précis (`storage_not_configured`, `storage_auth`, `storage_unavailable`). Le journal Vercel liste alors les noms des variables liées que la fonction voit réellement.
+
 Variables de production : `SETUP_TOKEN`, `NODE_ENV=production`, `COOKIE_SECURE=true`, `TRUST_PROXY=true`, `NODEJS_HELPERS=0`. L'éviction Redis doit rester **désactivée**.
 
 Point d'entrée Vercel : `api/index.js` (toutes les URL y sont routées par `vercel.json`, qui fournit aussi `public/` et `lib/` à la fonction).
@@ -78,7 +82,8 @@ Limites propres à Vercel : requêtes et réponses plafonnées à 4,5 Mo (import
 ```bash
 npm test                  # 40 tests API : authentification, rôles, isolation des agences, pipeline, import/export, sauvegarde/restauration
 node test/prod.test.js    # 11 tests en mode production : code d'initialisation, IP derrière Nginx, permissions, persistance, sauvegarde serveur
-node test/redis.test.js   # 9 tests du mode Redis : deux instances, écritures simultanées, blocage partagé, instantanés, panne Redis, point d'entrée Vercel
+node test/redis.test.js   # 13 tests du mode Redis : deux instances, écritures simultanées, blocage partagé, instantanés, panne Redis, point d'entrée Vercel
+node test/storage-config.test.js # 14 tests : détection et validation des variables Upstash (noms, préfixes, valeurs mal collées, URL TCP), sans fuite de secret
 node test/vercel-check.js # contrôle de déploiement Vercel : imports résolus, fichiers publiés, démarrage de la copie publiée
 bash test/update.test.sh  # 8 tests de mise à jour avec retour arrière automatique (root, environnement jetable)
 ```
