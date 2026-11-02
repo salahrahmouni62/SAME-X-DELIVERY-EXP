@@ -12,13 +12,16 @@
   };
 
   /* ---------------- state ---------------- */
-  const DEFAULT_FILTERS = { search: '', stage: 'ALL', agencyId: 'ALL', ownerId: 'ALL', wilaya: 'ALL', category: 'ALL', platform: 'ALL', storeType: 'ALL', priority: 'ALL', due: false, hot: false };
+  const DEFAULT_FILTERS = { search: '', stage: 'ALL', agencyId: 'ALL', ownerId: 'ALL', wilaya: 'ALL', category: 'ALL', platform: 'ALL', storeType: 'ALL', priority: 'ALL', due: false, hot: false,
+    // Prospects & CRM filters (same names as the API query parameters)
+    commune: 'ALL', tier: 'ALL', whatsapp: 'ALL', phone: 'ALL', contact: 'ALL', facebook: false, instagram: false, tiktok: false, online: false, scoreMin: '', scoreMax: '' };
   const S = {
     lang: store.get('lang', 'fr'), sound: store.get('sound', true),
     user: null, agency: null, agencies: [], users: [], leads: [], today: '', stats: null,
     view: 'dashboard', filters: { ...DEFAULT_FILTERS },
     stageTab: 'ALL', sort: { key: 'updatedAt', dir: -1 }, page: 1, pageSize: 50, selected: new Set(),
-    openLeadId: null, drawerTab: 'contact', sidebarOpen: false, snapshots: [], audit: [],
+    openLeadId: null, drawerTab: 'prospect', sidebarOpen: false, snapshots: [], audit: [],
+    settings: C.DEFAULT_SETTINGS, prospectSort: store.get('prospectSort', 'score'), lastDue: null,
   };
   const isSup = () => S.user && S.user.role === 'supervisor';
 
@@ -71,7 +74,14 @@
     note: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/>',
     cog: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>', refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
-    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
+    msg: '<path d="M12 3C6.5 3 2 7.1 2 12.2c0 2.9 1.4 5.4 3.7 7.1V22l3.4-1.9c.9.3 1.9.4 2.9.4 5.5 0 10-4.1 10-9.2S17.5 3 12 3Z"/><path d="m7 14 3-3 3 2 4-4"/>',
+    insta: '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".8"/>',
+    tiktok: '<path d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5"/><path d="M14 3c.5 2.6 2.4 4.4 5 4.6"/>',
+    fb: '<path d="M14 8h3V4h-3a4 4 0 0 0-4 4v3H7v4h3v6h4v-6h3l1-4h-4V8Z"/>',
+    star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/>', globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>',
   };
   const ic = (n, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n] || ''}</svg>`;
 
@@ -229,11 +239,17 @@
 
   /* ---------------- data ---------------- */
   async function loadAll() {
-    const [dir, leads] = await Promise.all([api('GET', '/api/directory'), api('GET', '/api/leads')]);
-    S.agencies = dir.agencies; S.users = dir.users; S.leads = leads.leads; S.today = leads.today;
+    const [dir, leads, settings] = await Promise.all([api('GET', '/api/directory'), api('GET', '/api/leads'), api('GET', '/api/settings')]);
+    S.agencies = dir.agencies; S.users = dir.users; S.leads = leads.leads; S.today = leads.today; S.settings = settings;
   }
   async function refreshLeads(silent) {
-    try { const r = await api('GET', '/api/leads'); S.leads = r.leads; S.today = r.today; renderSidebarCounts(); if (!S.openLeadId) renderContent(); }
+    try {
+      const r = await api('GET', '/api/leads'); S.leads = r.leads; S.today = r.today; renderSidebarCounts(); if (!S.openLeadId) renderContent();
+      // Follow-up alert: a follow-up date has just been reached
+      const due = S.leads.filter((l) => isDue(l)).length;
+      if (S.lastDue !== null && due > S.lastDue) { chime(); toast(`${due} ${t('remindersToast')}`, '', t('nav_reminders')); }
+      S.lastDue = due;
+    }
     catch (e) { if (!silent) toast(errMsg(e), 'err'); }
   }
   let pollTimer = null;
@@ -244,16 +260,27 @@
     await loadAll();
     renderShell();
     const due = S.leads.filter((l) => isDue(l)).length;
+    S.lastDue = due;
     if (due) toast(`${due} ${t('remindersToast')}`, '', t('nav_reminders'));
     clearInterval(pollTimer);
     pollTimer = setInterval(() => { if (document.visibilityState === 'visible' && S.user) refreshLeads(true); }, 60000);
   }
-  const VIEWS = ['dashboard', 'pipeline', 'table', 'posts', 'reminders', 'agencies', 'users', 'backup', 'audit'];
-  const ADMIN_VIEWS = ['agencies', 'users', 'backup', 'audit'];
+  const VIEWS = ['dashboard', 'prospects', 'pipeline', 'table', 'posts', 'reminders', 'agencies', 'users', 'settings', 'backup', 'audit'];
+  const ADMIN_VIEWS = ['agencies', 'users', 'settings', 'backup', 'audit'];
   const validView = (v) => VIEWS.includes(v) && (isSup() || !ADMIN_VIEWS.includes(v));
 
   /* ---------------- derived ---------------- */
-  const OPEN = (l) => !['WON_EXPEDITEUR', 'LOST'].includes(l.stage);
+  const OPEN = (l) => !C.CLOSED_STAGES.includes(l.stage);
+  /* Prospects CRM helpers (same rules as the server: lib/constants.js) */
+  const cats = () => S.settings.categories || [];
+  const catLabel = (id) => { const c = cats().find((x) => x.id === id); return c ? (S.lang === 'ar' ? c.ar || c.fr : c.fr) : tv('category', id); };
+  const catOptions = (cur) => cats().filter((c) => c.active !== false || c.id === cur).map((c) => [c.id, catLabel(c.id)]);
+  const scoreOf = (l) => C.effectiveScore(l, S.settings);
+  const tierOf = (l) => C.tierOf(scoreOf(l), S.settings);
+  const tierChip = (l) => { const sc = scoreOf(l), tr = C.tierOf(sc, S.settings); return `<span class="tier tier-${tr}" title="${esc(t('scoreSrc_' + (typeof l.score === 'number' ? l.scoreSource || 'manual' : 'auto')))}"><b>${tr}</b><span class="num">${sc}</span></span>`; };
+  const waChip = (l) => l.whatsappStatus === 'confirmed' ? `<span class="chip chip-green">${ic('wa')}${esc(t('waConfirmed'))}</span>`
+    : l.whatsappStatus === 'unverified' ? `<span class="chip chip-yellow" title="${esc(t('waToVerifyHelp'))}">${ic('wa')}${esc(t('waToVerify'))}</span>` : '';
+  const communes = () => [...new Set(S.leads.map((l) => l.city).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
   const isDue = (l) => OPEN(l) && l.nextFollowUpDate && l.nextFollowUpDate <= S.today;
   const isOverdue = (l) => OPEN(l) && l.nextFollowUpDate && l.nextFollowUpDate < S.today;
   const isPrio = (l) => l.priority === 'high' || isOverdue(l) || (C.HOT_STAGES.includes(l.stage) && !!l.phonePrimary);
@@ -274,8 +301,17 @@
       if (f.priority !== 'ALL' && l.priority !== f.priority) return false;
       if (f.due && !isDue(l)) return false;
       if (f.hot && !isPrio(l)) return false;
+      if (f.commune !== 'ALL' && C.norm(l.city || '') !== C.norm(f.commune === 'NONE' ? '' : f.commune)) return false;
+      if (f.tier !== 'ALL' && tierOf(l) !== f.tier) return false;
+      if (f.scoreMin !== '' && scoreOf(l) < Number(f.scoreMin)) return false;
+      if (f.scoreMax !== '' && scoreOf(l) > Number(f.scoreMax)) return false;
+      if (f.whatsapp !== 'ALL') { const w = l.whatsappStatus || ''; if ((f.whatsapp === 'confirmed' && w !== 'confirmed') || (f.whatsapp === 'unverified' && w !== 'unverified') || (f.whatsapp === 'any' && !w) || (f.whatsapp === 'none' && w)) return false; }
+      if (f.facebook || f.instagram || f.tiktok) { const so = C.socialLinks(l); if ((f.facebook && !so.facebook) || (f.instagram && !so.instagram) || (f.tiktok && !so.tiktok)) return false; }
+      if (f.online && !l.sellsOnline) return false;
+      if ((f.phone === 'yes' && !l.phonePrimary) || (f.phone === 'no' && l.phonePrimary)) return false;
+      if ((f.contact === 'contacted' && !C.CONTACTED_STAGES.includes(l.stage)) || (f.contact === 'not' && C.CONTACTED_STAGES.includes(l.stage))) return false;
       if (s) {
-        const hay = C.norm([l.storeName, l.handle, l.phonePrimary, l.phoneSecondary, l.ownerName, l.city, l.neighborhood].join(' '));
+        const hay = C.norm([l.storeName, l.handle, l.phonePrimary, l.phoneSecondary, l.ownerName, l.city, l.neighborhood, l.productType, (l.tags || []).join(' ')].join(' '));
         if (!hay.includes(s) && !(digits.length >= 4 && hay.includes(digits))) return false;
       }
       return true;
@@ -283,7 +319,7 @@
   }
   const filterQuery = () => {
     const f = S.filters, q = new URLSearchParams();
-    Object.entries(f).forEach(([k, v]) => { if (k === 'due' || k === 'hot') { if (v) q.set(k, '1'); } else if (v && v !== 'ALL') q.set(k, v); });
+    Object.entries(f).forEach(([k, v]) => { if (typeof v === 'boolean') { if (v) q.set(k, '1'); } else if (v !== '' && v !== 'ALL') q.set(k, v); });
     return q.toString();
   };
   const filtersActive = () => Object.keys(DEFAULT_FILTERS).some((k) => S.filters[k] !== DEFAULT_FILTERS[k]);
@@ -326,12 +362,13 @@
           <div class="sb-scroll">
             <div><div class="sb-label">${esc(t('views'))}</div><nav class="nav">
               ${nav('dashboard', 'dash')}
+              ${nav('prospects', 'target')}
               ${nav('pipeline', 'kanban', `<span class="count" data-count="total"></span>`)}
               ${nav('table', 'table')}
               ${nav('posts', 'grid')}
               ${nav('reminders', 'bell', `<span class="count" data-count="due"></span>`)}
             </nav></div>
-            ${isSup() ? `<div><div class="sb-label">${esc(t('admin'))}</div><nav class="nav">${nav('agencies', 'building')}${nav('users', 'users')}${nav('backup', 'db')}${nav('audit', 'list')}</nav></div>` : ''}
+            ${isSup() ? `<div><div class="sb-label">${esc(t('admin'))}</div><nav class="nav">${nav('agencies', 'building')}${nav('users', 'users')}${nav('settings', 'cog')}${nav('backup', 'db')}${nav('audit', 'list')}</nav></div>` : ''}
             <div class="sb-card" id="sb-campaign"></div>
             <div><div class="sb-label">${esc(t('quickFilters'))}</div><div class="qf" id="sb-qf"></div></div>
           </div>
@@ -366,7 +403,7 @@
         </div>
         <nav class="bottom-nav" aria-label="Navigation mobile">
           <button data-nav="dashboard" class="${S.view === 'dashboard' ? 'on' : ''}">${ic('dash')}${esc(S.lang === 'ar' ? 'القيادة' : 'Bord')}</button>
-          <button data-nav="pipeline" class="${S.view === 'pipeline' ? 'on' : ''}">${ic('kanban')}${esc(S.lang === 'ar' ? 'المسار' : 'Pipeline')}</button>
+          <button data-nav="prospects" class="${S.view === 'prospects' ? 'on' : ''}">${ic('target')}${esc(S.lang === 'ar' ? 'التجار' : 'Prospects')}</button>
           <button data-action="new-lead" aria-label="${esc(t('newLead'))}"><span class="fab">${ic('plus')}</span></button>
           <button data-nav="table" class="${S.view === 'table' ? 'on' : ''}">${ic('table')}${esc(S.lang === 'ar' ? 'القائمة' : 'Liste')}</button>
           <button data-nav="reminders" class="${S.view === 'reminders' ? 'on' : ''}">${ic('bell')}${esc(S.lang === 'ar' ? 'المتابعات' : 'Relances')}</button>
@@ -386,7 +423,7 @@
       h += sel('ownerId', t('allAgents'), S.users.filter((u) => f.agencyId === 'ALL' || u.agencyId === f.agencyId || (f.agencyId === 'NONE' && !u.agencyId)).map((u) => opt(u.id, u.name, f.ownerId)).join(''));
     }
     h += sel('wilaya', t('allWilayas'), C.WILAYAS.map((w) => opt(w.code, `${w.code} - ${S.lang === 'ar' ? w.ar : w.fr}`, f.wilaya)).join('') + opt('NONE', '— ' + t('wilayaUnconfirmed'), f.wilaya));
-    h += sel('category', t('allCategories'), C.CATEGORIES.map((c) => opt(c, tv('category', c), f.category)).join(''));
+    h += sel('category', t('allCategories'), catOptions(f.category).map(([c, n]) => opt(c, n, f.category)).join(''));
     h += sel('stage', t('allStages'), C.STAGE_IDS.map((s) => opt(s, tv('stage', s), f.stage)).join(''));
     h += sel('priority', t('allPriorities'), C.PRIORITIES.map((p) => opt(p, tv('priority', p), f.priority)).join(''));
     h += sel('platform', t('allPlatforms'), C.PLATFORMS.map((p) => opt(p, tv('platform', p), f.platform)).join(''));
@@ -428,13 +465,14 @@
     const el = $('#content');
     if (!el) return;
     renderSidebarCounts();
-    const fn = { dashboard: viewDashboard, pipeline: viewPipeline, table: viewTable, posts: viewPosts, reminders: viewReminders, agencies: viewAgencies, users: viewUsers, backup: viewBackup, audit: viewAudit }[S.view];
+    const fn = { dashboard: viewDashboard, prospects: viewProspects, settings: viewSettings, pipeline: viewPipeline, table: viewTable, posts: viewPosts, reminders: viewReminders, agencies: viewAgencies, users: viewUsers, backup: viewBackup, audit: viewAudit }[S.view];
     fn(el);
   }
 
   /* mobile filter block (header filters are hidden on small screens) */
   const mobileFilters = () => {
     const n = Object.keys(DEFAULT_FILTERS).filter((k) => k !== 'search' && S.filters[k] !== DEFAULT_FILTERS[k]).length;
+    if (S.view === 'prospects') return ''; // the Prospects view has its own filter panel (all screen sizes)
     return `<details class="mobile-filters panel" ${S.mobileFiltersOpen ? 'open' : ''} data-mfilters>
       <summary class="btn btn-ghost" style="width:100%;justify-content:space-between">${ic('list')} ${esc(S.lang === 'ar' ? 'التصفية' : 'Filtres')}${n ? ` <span class="chip chip-yellow">${n}</span>` : ''}<span style="margin-inline-start:auto">${ic('chevR')}</span></summary>
       <div class="panel-b" style="display:grid;gap:8px;padding-top:4px"><div class="grid-2">${filterSelects()}</div>${filtersActive() ? `<button class="btn btn-sm" data-action="reset-filters">${esc(t('reset'))}</button>` : ''}</div></details>`;
@@ -496,6 +534,180 @@
     return `<div class="panel-b" style="display:grid;gap:8px">${up.map((l) => remRow(l)).join('')}</div>`;
   }
 
+  /* ---------------- views: Prospects & CRM ---------------- */
+  const PROSPECT_SORTS = {
+    score: (a, b) => scoreOf(b) - scoreOf(a),
+    phone: (a, b) => (!!b.phonePrimary - !!a.phonePrimary) || scoreOf(b) - scoreOf(a),
+    whatsapp: (a, b) => (({ confirmed: 2, unverified: 1 }[b.whatsappStatus] || 0) - ({ confirmed: 2, unverified: 1 }[a.whatsappStatus] || 0)) || scoreOf(b) - scoreOf(a),
+    social: (a, b) => { const n = (l) => Object.values(C.socialLinks(l)).filter(Boolean).length; return (n(b) - n(a)) || scoreOf(b) - scoreOf(a); },
+    online: (a, b) => (!!b.sellsOnline - !!a.sellsOnline) || scoreOf(b) - scoreOf(a),
+    commune: (a, b) => (a.city || '~').localeCompare(b.city || '~', 'fr') || scoreOf(b) - scoreOf(a),
+    followup: (a, b) => (a.nextFollowUpDate || '9999').localeCompare(b.nextFollowUpDate || '9999'),
+    name: (a, b) => a.storeName.localeCompare(b.storeName, 'fr'),
+  };
+  function prospectStatsLocal(leads) {
+    const s = { total: leads.length, withPhone: 0, whatsappConfirmed: 0, whatsappUnverified: 0, facebook: 0, instagram: 0, tiktok: 0, sellsOnline: 0, contacted: 0, activeClients: 0, notContacted: 0,
+      tiers: { A: 0, B: 0, C: 0 }, byCommune: {}, byCategory: {}, byStage: {} };
+    for (const l of leads) {
+      if (l.phonePrimary) s.withPhone++;
+      if (l.whatsappStatus === 'confirmed') s.whatsappConfirmed++; else if (l.whatsappStatus === 'unverified') s.whatsappUnverified++;
+      const so = C.socialLinks(l); if (so.facebook) s.facebook++; if (so.instagram) s.instagram++; if (so.tiktok) s.tiktok++;
+      if (l.sellsOnline) s.sellsOnline++;
+      if (C.CONTACTED_STAGES.includes(l.stage)) s.contacted++; else s.notContacted++;
+      if (l.stage === 'WON_EXPEDITEUR') s.activeClients++;
+      s.tiers[tierOf(l)]++;
+      s.byCommune[l.city || '—'] = (s.byCommune[l.city || '—'] || 0) + 1;
+      s.byCategory[l.category] = (s.byCategory[l.category] || 0) + 1;
+      s.byStage[l.stage] = (s.byStage[l.stage] || 0) + 1;
+    }
+    return s;
+  }
+  function barList(entries, total, label, filterKey) {
+    const max = Math.max(1, ...entries.map((e) => e[1]));
+    return entries.length ? `<div class="hbars">${entries.map(([k, v]) => `<button class="hbar" ${filterKey ? `data-pf="${filterKey}" data-val="${esc(k)}"` : ''}><span class="hbar-l" dir="auto">${esc(label(k))}</span><span class="hbar-b"><span style="width:${(v / max) * 100}%"></span></span><b class="num">${v}</b><small class="num">${total ? Math.round((v / total) * 100) : 0}%</small></button>`).join('')}</div>` : `<div class="empty">${esc(t('noData'))}</div>`;
+  }
+  function contactButtons(l, compact) {
+    const so = C.socialLinks(l);
+    const fbSlug = (so.facebook.match(/facebook\.com\/(?:profile\.php\?id=(\d+)|(?!share|groups|ads)([A-Za-z0-9.\-]+))/) || []);
+    const messenger = fbSlug[1] || fbSlug[2] ? `https://m.me/${fbSlug[1] || fbSlug[2]}` : so.facebook;
+    const b = (cls, inner, attrs) => `<${attrs.href ? 'a' : 'button'} class="btn btn-sm ${compact ? 'btn-icon' : ''} ${cls}" ${Object.entries(attrs).map(([k, v]) => `${k}="${esc(v)}"`).join(' ')}>${inner}</${attrs.href ? 'a' : 'button'}>`;
+    const lab = (icn, txt) => compact ? ic(icn) : `${ic(icn)} ${esc(txt)}`;
+    let h = '';
+    if (l.phonePrimary) {
+      h += b('', lab('phone', t('call')), { href: 'tel:' + l.phonePrimary, title: t('call') + ' ' + C.formatPhone(l.phonePrimary), 'data-log': 'Phone Call', 'data-id': l.id });
+      h += b('btn-wa', lab('wa', 'WhatsApp'), { 'data-action': 'pitch', 'data-id': l.id, title: l.whatsappStatus === 'confirmed' ? 'WhatsApp' : 'WhatsApp — ' + t('waToVerify') });
+    }
+    if (so.facebook) h += b('', lab('msg', 'Messenger'), { href: messenger, target: '_blank', rel: 'noopener noreferrer', title: 'Facebook Messenger' });
+    if (so.instagram) h += b('', lab('insta', 'Instagram'), { href: so.instagram, target: '_blank', rel: 'noopener noreferrer', title: 'Instagram' });
+    if (so.tiktok) h += b('', lab('tiktok', 'TikTok'), { href: so.tiktok, target: '_blank', rel: 'noopener noreferrer', title: 'TikTok' });
+    if (l.phonePrimary) h += b('', lab('copy', t('copyNumber')), { 'data-action': 'copy-phone', 'data-id': l.id, title: t('copyNumber') });
+    return h;
+  }
+  function prospectFilters() {
+    const f = S.filters;
+    const opt = (v, label, cur) => `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(label)}</option>`;
+    const sel = (key, all, options) => `<label class="field"><span>${esc(t('pf_' + key))}</span><select class="select ${f[key] !== 'ALL' ? 'on' : ''}" data-filter="${key}">${opt('ALL', all, f[key])}${options}</select></label>`;
+    const tog = (key, icn, label) => `<button class="btn btn-sm toggle ${f[key] ? 'on' : ''}" data-ptoggle="${key}" aria-pressed="${f[key]}">${ic(icn)} ${esc(label)}</button>`;
+    return `<div class="pf-grid">
+      ${sel('commune', t('allCommunes'), communes().map((c) => opt(c, `${c} (${S.leads.filter((l) => l.city === c).length})`, f.commune)).join(''))}
+      ${sel('category', t('allCategories'), catOptions(f.category).map(([c, n]) => opt(c, n, f.category)).join(''))}
+      ${sel('tier', t('allTiers'), ['A', 'B', 'C'].map((x) => opt(x, t('tier_' + x), f.tier)).join(''))}
+      ${sel('stage', t('allStages'), C.STAGE_IDS.map((x) => opt(x, tv('stage', x), f.stage)).join(''))}
+      ${sel('whatsapp', t('all'), [['confirmed', t('waConfirmed')], ['unverified', t('waToVerify')], ['any', t('waAny')], ['none', t('waNone')]].map(([v, n]) => opt(v, n, f.whatsapp)).join(''))}
+      ${sel('phone', t('all'), [['yes', t('withPhone')], ['no', t('withoutPhone')]].map(([v, n]) => opt(v, n, f.phone)).join(''))}
+      ${sel('contact', t('all'), [['not', t('notContacted')], ['contacted', t('kpi_contacted')]].map(([v, n]) => opt(v, n, f.contact)).join(''))}
+      ${isSup() ? sel('ownerId', t('allAgents'), S.users.map((u) => opt(u.id, u.name, f.ownerId)).join('')) : ''}
+      <label class="field"><span>${esc(t('pf_score'))}</span><span class="score-range"><input class="input num" type="number" min="0" max="100" placeholder="0" data-pnum="scoreMin" value="${esc(f.scoreMin)}"><span>—</span><input class="input num" type="number" min="0" max="100" placeholder="100" data-pnum="scoreMax" value="${esc(f.scoreMax)}"></span></label>
+    </div>
+    <div class="pf-toggles">${tog('facebook', 'fb', 'Facebook')}${tog('instagram', 'insta', 'Instagram')}${tog('tiktok', 'tiktok', 'TikTok')}${tog('online', 'globe', t('sellsOnline'))}
+      ${filtersActive() ? `<button class="btn btn-sm btn-ghost" data-action="reset-filters">${ic('x')} ${esc(t('reset'))}</button>` : ''}</div>`;
+  }
+  async function viewProspects(el) {
+    const leads = filtered().sort(PROSPECT_SORTS[S.prospectSort] || PROSPECT_SORTS.score);
+    const s = prospectStatsLocal(leads);
+    const pages = Math.max(1, Math.ceil(leads.length / S.pageSize));
+    S.page = Math.min(S.page, pages);
+    const slice = leads.slice((S.page - 1) * S.pageSize, S.page * S.pageSize);
+    const allSel = slice.length && slice.every((l) => S.selected.has(l.id));
+    const kpi = (label, value, filter, cls = '', sub = '') => `<button class="kpi click ${cls}" ${filter}><div class="label">${esc(label)}</div><div class="value">${value}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</button>`;
+    const pct = (a) => (s.total ? Math.round((a / s.total) * 100) : 0) + '%';
+    const tierBar = ['A', 'B', 'C'].map((x) => `<span class="seg seg-${x}" style="flex:${s.tiers[x] || 0.0001}" title="${esc(t('tier_' + x))}">${s.tiers[x] ? x + ' · ' + s.tiers[x] : ''}</span>`).join('');
+    const th = (k, label) => `<th class="sortable" data-psort="${k}">${esc(label)}${S.prospectSort === k ? ' ↓' : ''}</th>`;
+    el.innerHTML = `<div class="page">
+      <div class="page-head"><div><h1>${esc(t('nav_prospects'))}</h1><p>${esc(t('prospectsText'))}</p></div>
+        <div class="head-actions">
+          ${isSup() ? `<button class="btn btn-primary" data-action="import-xlsx">${ic('up')} ${esc(t('importExcel'))}</button>` : ''}
+          <button class="btn" data-action="export" data-format="xlsx">${ic('down')} Excel</button><button class="btn" data-action="export" data-format="csv">${ic('down')} CSV</button>
+          <details class="dl-menu"><summary class="btn">${ic('down')} ${esc(t('downloads'))}</summary><div class="menu-b">
+            <label class="field"><span>${esc(t('dlByCommune'))}</span><select class="select" data-dl="commune"><option value="">—</option>${communes().map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></label>
+            <label class="field"><span>${esc(t('dlByTier'))}</span><select class="select" data-dl="tier"><option value="">—</option>${['A', 'B', 'C'].map((x) => `<option value="${x}">${esc(t('tier_' + x))}</option>`).join('')}</select></label>
+            <button class="btn btn-sm" data-action="dl" data-q="phone=yes">${ic('phone')} ${esc(t('dlWithPhone'))}</button>
+            <small class="hint">${esc(t('dlHint'))}</small></div></details>
+        </div></div>
+      <div class="kpis kpis-10">
+        ${kpi(t('pk_total'), s.total, 'data-action="reset-filters"', 'accent', `${t('avgScore')} ${s.total ? Math.round(leads.reduce((a, l) => a + scoreOf(l), 0) / s.total) : 0}/100`)}
+        ${kpi(t('pk_phone'), s.withPhone, 'data-pf="phone" data-val="yes"', '', pct(s.withPhone))}
+        ${kpi(t('pk_wa'), s.whatsappConfirmed, 'data-pf="whatsapp" data-val="confirmed"', '', `${s.whatsappUnverified} ${esc(t('waToVerify').toLowerCase())}`)}
+        ${kpi('Facebook', s.facebook, 'data-ptoggle="facebook"', '', pct(s.facebook))}
+        ${kpi('Instagram', s.instagram, 'data-ptoggle="instagram"', '', pct(s.instagram))}
+        ${kpi('TikTok', s.tiktok, 'data-ptoggle="tiktok"', '', pct(s.tiktok))}
+        ${kpi(t('pk_online'), s.sellsOnline, 'data-ptoggle="online"', '', pct(s.sellsOnline))}
+        ${kpi(t('kpi_contacted'), s.contacted, 'data-pf="contact" data-val="contacted"', '', pct(s.contacted))}
+        ${kpi(t('pk_clients'), s.activeClients, 'data-pf="stage" data-val="WON_EXPEDITEUR"', s.activeClients ? 'good' : '', pct(s.activeClients))}
+        ${kpi(t('notContacted'), s.notContacted, 'data-pf="contact" data-val="not"', s.notContacted ? 'warn' : '', pct(s.notContacted))}
+      </div>
+      <div class="dash-grid dash-3">
+        <section class="panel"><div class="panel-h"><h2>${esc(t('tiersTitle'))}</h2><small class="hint">A ≥ ${S.settings.scoring.aMin} · B ≥ ${S.settings.scoring.bMin}</small></div><div class="panel-b">
+          <div class="tierbar">${tierBar}</div>
+          ${barList(['A', 'B', 'C'].map((x) => [x, s.tiers[x]]), s.total, (x) => t('tier_' + x), 'tier')}</div></section>
+        <section class="panel"><div class="panel-h"><h2>${esc(t('byCommune'))}</h2></div><div class="panel-b">${barList(Object.entries(s.byCommune).sort((a, b) => b[1] - a[1]).slice(0, 12), s.total, (x) => x, 'commune')}</div></section>
+        <section class="panel"><div class="panel-h"><h2>${esc(t('byCategory'))}</h2></div><div class="panel-b">${barList(Object.entries(s.byCategory).sort((a, b) => b[1] - a[1]), s.total, catLabel, 'category')}</div></section>
+      </div>
+      <section class="panel"><div class="panel-h"><h2>${esc(t('crmPipeline'))}</h2></div><div class="panel-b stage-strip">${C.STAGES.map((st) => `<button class="stage-pill ${S.filters.stage === st.id ? 'on' : ''}" data-pf="stage" data-val="${st.id}"><span class="dot" style="background:${st.color}"></span>${esc(tv('stage', st.id))}<b class="num">${s.byStage[st.id] || 0}</b></button>`).join('')}</div></section>
+      <section class="panel"><div class="panel-h"><h2>${ic('search')} ${esc(t('filtersTitle'))}</h2><label class="sortby">${esc(t('sortBy'))} <select class="select" data-psortsel>${Object.keys(PROSPECT_SORTS).map((k) => `<option value="${k}" ${S.prospectSort === k ? 'selected' : ''}>${esc(t('sort_' + k))}</option>`).join('')}</select></label></div>
+        <div class="panel-b">${prospectFilters()}</div></section>
+      ${S.selected.size ? `<div class="bulkbar"><b>${S.selected.size} ${esc(t('selected'))}</b>
+        <select class="select" data-bulk="stage"><option value="">${esc(t('bulkStage'))}…</option>${C.STAGE_IDS.map((x) => `<option value="${x}">${esc(tv('stage', x))}</option>`).join('')}</select>
+        ${isSup() ? `<select class="select" data-bulk="ownerId"><option value="">${esc(t('bulkAssign'))}…</option>${assignOptions('')}</select>` : ''}
+        <button class="btn btn-sm" data-action="export-selection" style="background:#fff">${ic('down')} ${esc(t('exportSelection'))}</button>
+        <button class="btn btn-sm btn-ghost" data-action="bulk-clear" style="color:#fff;margin-inline-start:auto">${ic('x')}</button></div>` : ''}
+      <section class="panel"><div class="table-wrap"><table class="tbl ptbl">
+        <thead><tr><th style="width:36px"><input type="checkbox" data-action="select-page" ${allSel ? 'checked' : ''} aria-label="select"></th>
+          ${th('name', t('col_store'))}${th('commune', t('pf_commune'))}<th>${esc(t('col_category'))}</th>${th('phone', t('col_contact'))}${th('social', t('col_social'))}${th('score', 'Score')}<th>${esc(t('col_stage'))}</th>${th('followup', t('col_followup'))}${isSup() ? `<th>${esc(t('col_agent'))}</th>` : ''}<th></th></tr></thead>
+        <tbody>${slice.length ? slice.map((l) => { const so = C.socialLinks(l); return `<tr class="${S.selected.has(l.id) ? 'sel' : ''}">
+          <td><input type="checkbox" data-select="${l.id}" ${S.selected.has(l.id) ? 'checked' : ''} aria-label="select"></td>
+          <td class="store" data-open="${l.id}" style="cursor:pointer"><b dir="auto">${esc(l.storeName)}</b><small dir="auto">${esc(l.productType || '')}${(l.tags || []).filter((x) => /^Top 50/.test(x)).map((x) => ` · <span class="top50">${ic('star')}${esc(x)}</span>`).join('')}</small></td>
+          <td>${esc(l.city || '—')}</td>
+          <td><small>${esc(catLabel(l.category))}</small></td>
+          <td>${l.phonePrimary ? `<span class="num" dir="ltr">${esc(C.formatPhone(l.phonePrimary))}</span><br>${waChip(l)}` : `<small style="color:var(--faint)">${esc(t('noPhone'))}</small>`}</td>
+          <td class="social-cell">${so.facebook ? `<a href="${esc(so.facebook)}" target="_blank" rel="noopener noreferrer" title="Facebook">${ic('fb')}</a>` : ''}${so.instagram ? `<a href="${esc(so.instagram)}" target="_blank" rel="noopener noreferrer" title="Instagram">${ic('insta')}</a>` : ''}${so.tiktok ? `<a href="${esc(so.tiktok)}" target="_blank" rel="noopener noreferrer" title="TikTok">${ic('tiktok')}</a>` : ''}${l.sellsOnline ? `<span class="chip chip-blue" title="${esc(t('sellsOnline'))}">${ic('globe')}</span>` : ''}${!so.facebook && !so.instagram && !so.tiktok && !l.sellsOnline ? '—' : ''}</td>
+          <td>${tierChip(l)}</td>
+          <td><select class="select" data-stage-select="${l.id}" aria-label="${esc(t('stage'))}">${C.STAGE_IDS.map((x) => `<option value="${x}" ${x === l.stage ? 'selected' : ''}>${esc(tv('stage', x))}</option>`).join('')}</select></td>
+          <td>${l.nextFollowUpDate ? `<span class="chip ${isOverdue(l) ? 'chip-red' : isDue(l) ? 'chip-yellow' : ''}">${esc(fmtDate(l.nextFollowUpDate))}</span>` : '—'}</td>
+          ${isSup() ? `<td><small>${esc(userName(l.ownerId))}</small></td>` : ''}
+          <td class="acts-cell">${contactButtons(l, true)}<button class="btn btn-sm" data-open="${l.id}">${esc(t('open'))}</button></td></tr>`; }).join('') : `<tr><td colspan="11"><div class="empty">${esc(S.leads.length ? t('noLeads') : t('noProspectsYet'))}${!S.leads.length && isSup() ? `<br><button class="btn btn-primary" data-action="import-xlsx" style="margin-top:12px">${ic('up')} ${esc(t('importExcel'))}</button>` : ''}</div></td></tr>`}</tbody></table></div>
+        <div class="pager"><span>${leads.length ? `${(S.page - 1) * S.pageSize + 1}–${Math.min(S.page * S.pageSize, leads.length)} ${esc(t('of'))} ${leads.length}` : ''}</span>
+          <span style="display:flex;gap:6px;align-items:center"><select class="select" data-pagesize style="width:auto;height:30px">${[25, 50, 100].map((n) => `<option ${S.pageSize === n ? 'selected' : ''}>${n}</option>`).join('')}</select><button class="btn btn-sm btn-icon" data-page="${S.page - 1}" ${S.page <= 1 ? 'disabled' : ''}>${ic('chevL', 'flip')}</button><span class="num">${esc(t('page'))} ${S.page} / ${pages}</span><button class="btn btn-sm btn-icon" data-page="${S.page + 1}" ${S.page >= pages ? 'disabled' : ''}>${ic('chevR', 'flip')}</button></span></div>
+      </section></div>`;
+  }
+
+  /* ---------------- views: CRM settings (supervisor) ---------------- */
+  function viewSettings(el) {
+    const st = S.settings, sc = st.scoring;
+    const n = (k, label) => `<label class="field"><span>${esc(label)}</span><input class="input num" type="number" min="0" max="100" data-sc="${k}" value="${esc(sc[k])}"></label>`;
+    el.innerHTML = `<div class="page"><div class="page-head"><div><h1>${esc(t('nav_settings'))}</h1><p>${esc(t('settingsText'))}</p></div>
+        <button class="btn btn-primary" data-action="save-settings">${ic('check')} ${esc(t('save'))}</button></div>
+      <div class="dash-grid">
+        <section class="panel"><div class="panel-h"><h2>${esc(t('categoriesTitle'))}</h2><button class="btn btn-sm" data-action="add-category">${ic('plus')} ${esc(t('addCategory'))}</button></div>
+          <div class="table-wrap"><table class="tbl" id="cat-table"><thead><tr><th>${esc(t('labelFr'))}</th><th>${esc(t('labelAr'))}</th><th class="r">${esc(t('weight'))}</th><th class="r">${esc(t('leads'))}</th><th>${esc(t('active'))}</th></tr></thead>
+          <tbody>${st.categories.map((c) => `<tr data-cat="${esc(c.id)}"><td><input class="input" data-k="fr" value="${esc(c.fr)}"></td><td><input class="input" dir="rtl" data-k="ar" value="${esc(c.ar)}"></td>
+            <td class="r"><input class="input num" style="width:70px" type="number" min="0" max="100" data-k="weight" value="${esc(c.weight)}"></td><td class="r num">${S.leads.filter((l) => l.category === c.id).length}</td>
+            <td><input type="checkbox" data-k="active" ${c.active !== false ? 'checked' : ''} ${c.id === 'Other' ? 'disabled' : ''}></td></tr>`).join('')}</tbody></table></div>
+          <div class="panel-b"><small class="hint">${esc(t('categoriesHint'))}</small></div></section>
+        <section class="panel"><div class="panel-h"><h2>${esc(t('scoringTitle'))}</h2></div><div class="panel-b" style="display:grid;gap:12px">
+          <p class="hint" style="margin:0;line-height:1.5">${esc(t('scoringHint'))}</p>
+          <div class="grid-3">${n('mobile', t('sc_mobile'))}${n('fixed', t('sc_fixed'))}${n('online', t('sc_online'))}</div>
+          <div class="grid-3">${n('perSocial', t('sc_perSocial'))}${n('socialCap', t('sc_socialCap'))}${n('open7', t('sc_open7'))}</div>
+          <div class="grid-3">${n('reviews20', t('sc_reviews20'))}${n('reviews8', t('sc_reviews8'))}${n('reviews3', t('sc_reviews3'))}</div>
+          <div class="grid-3">${n('activityCap', t('sc_activityCap'))}<label class="field"><span>${esc(t('sc_homeCommune'))}</span><input class="input" data-sc="homeCommune" value="${esc(sc.homeCommune)}"></label>${n('home', t('sc_home'))}</div>
+          <div class="grid-3">${n('other', t('sc_other'))}${n('aMin', t('sc_aMin'))}${n('bMin', t('sc_bMin'))}</div>
+          <div class="callout">${esc(t('recalcText'))}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-sm" data-action="recalc" data-excel="0">${ic('refresh')} ${esc(t('recalcAuto'))}</button><button class="btn btn-sm btn-dark" data-action="recalc" data-excel="1">${ic('refresh')} ${esc(t('recalcAll'))}</button></div></div>
+          ${st.updatedAt ? `<small class="hint">${esc(t('updated'))} ${esc(fmtDate(st.updatedAt, true))} · ${esc(st.updatedBy)}</small>` : ''}
+        </div></section>
+      </div></div>`;
+  }
+  function readSettingsForm() {
+    const scoring = {};
+    $$('[data-sc]').forEach((i) => { scoring[i.dataset.sc] = i.dataset.sc === 'homeCommune' ? i.value : Number(i.value); });
+    const categories = $$('#cat-table tbody tr').map((tr) => ({ id: tr.dataset.cat || '', fr: $('[data-k=fr]', tr).value, ar: $('[data-k=ar]', tr).value, weight: Number($('[data-k=weight]', tr).value), active: $('[data-k=active]', tr).checked }));
+    return { scoring, categories };
+  }
+  async function saveSettings() {
+    try { S.settings = await api('PATCH', '/api/settings', readSettingsForm()); toast(t('saved'), 'ok'); renderContent(); return true; }
+    catch (e) { toast(errMsg(e), 'err'); return false; }
+  }
+
   /* ---------------- views: pipeline ---------------- */
   const stageMeta = (id) => C.STAGES.find((s) => s.id === id) || C.STAGES[0];
   function leadCard(l) {
@@ -504,7 +716,7 @@
     return `<article class="card ${isPrio(l) ? 'prio' : ''}" draggable="true" data-lead="${l.id}">
       <div class="card-top"><div style="min-width:0"><div class="card-title" dir="auto">${esc(l.storeName)}</div><div class="card-handle" dir="auto">${esc(l.handle || '')}</div></div><span class="plat plat-${esc(l.platform)}">${esc(tv('platform', l.platform))}</span></div>
       <div class="card-tags">
-        <span class="chip">${esc(tv('category', l.category))}</span>
+        <span class="chip">${esc(catLabel(l.category))}</span>
         <span class="chip">${esc(tv('storeShort', l.storeType))}</span>
         ${l.wilayaCode ? `<span class="chip ${l.wilayaConfirmed ? 'chip-green' : ''}">${ic('pin')}${esc(wShort(l.wilayaCode))}</span>` : `<span class="chip chip-yellow">${ic('pin')}${esc(t('wilayaUnconfirmed'))}</span>`}
         ${l.priority === 'high' ? `<span class="chip chip-red">${ic('flame')}${esc(tv('priority', 'high'))}</span>` : ''}
@@ -571,7 +783,7 @@
         <tbody>${slice.length ? slice.map((l) => `<tr data-row="${l.id}" class="${S.selected.has(l.id) ? 'sel' : ''}">
           <td><input type="checkbox" data-select="${l.id}" ${S.selected.has(l.id) ? 'checked' : ''} aria-label="select"></td>
           <td class="store" data-open="${l.id}" style="cursor:pointer"><span class="plat plat-${esc(l.platform)}">${esc(tv('platform', l.platform))}</span> ${isPrio(l) ? `<span class="hot">${ic('flame')}</span>` : ''}<b dir="auto">${esc(l.storeName)}</b><small dir="auto">${esc(l.handle)}</small></td>
-          <td>${esc(tv('category', l.category))}</td>
+          <td>${esc(catLabel(l.category))}</td>
           <td><span class="chip">${esc(tv('storeShort', l.storeType))}</span><br><small style="color:${l.wilayaConfirmed ? 'var(--green)' : 'var(--muted)'}">${l.wilayaCode ? esc(wName(l.wilayaCode)) : esc(t('wilayaUnconfirmed'))}</small></td>
           <td>${l.ownerName ? `<b>${esc(l.ownerName)}</b><br>` : ''}${l.phonePrimary ? `<small class="num" dir="ltr">${esc(C.formatPhone(l.phonePrimary))}</small>` : '<small style="color:var(--faint)">—</small>'}</td>
           <td><small>${esc(tv('volume', l.estimatedVolume))}</small></td>
@@ -595,7 +807,7 @@
           <span class="tl plat plat-${esc(l.platform)}">${esc(tv('platform', l.platform))}</span><span class="tr chip" style="background:#fff"><span class="dot" style="background:${stageMeta(l.stage).color}"></span>${esc(tv('stage', l.stage))}</span></div>
         <div class="post-b"><div class="card-top"><div style="min-width:0"><div class="card-title" dir="auto">${esc(l.storeName)}</div><div class="card-handle" dir="auto">${esc(l.handle)}</div></div>${l.postUrl ? `<a class="btn btn-sm btn-icon btn-ghost" href="${esc(l.postUrl)}" target="_blank" rel="noopener noreferrer" title="${esc(t('openPost'))}" data-stop>${ic('ext')}</a>` : ''}</div>
           <p dir="auto">${esc(l.postCaption || '')}</p>
-          <div class="card-tags"><span class="chip">${esc(tv('category', l.category))}</span><span class="chip">${esc(tv('storeShort', l.storeType))}</span>${l.wilayaCode ? `<span class="chip">${esc(wShort(l.wilayaCode))}</span>` : ''}</div></div>
+          <div class="card-tags"><span class="chip">${esc(catLabel(l.category))}</span><span class="chip">${esc(tv('storeShort', l.storeType))}</span>${l.wilayaCode ? `<span class="chip">${esc(wShort(l.wilayaCode))}</span>` : ''}</div></div>
         <div class="post-f"><span>${l.phonePrimary ? `<span class="num" dir="ltr">${esc(C.formatPhone(l.phonePrimary))}</span>` : esc(t('notQualified'))}</span><span>${esc(t('details'))} →</span></div>
       </article>`).join('')}</div>${leads.length > LIMIT ? `<div class="empty">+${leads.length - LIMIT} — <button class="btn btn-sm" data-nav="table">${esc(t('nav_table'))}</button></div>` : ''}` : `<div class="panel empty">${esc(t('noLeads'))}</div>`}</div>`;
   }
@@ -784,7 +996,7 @@
           <label class="field"><span>${esc(t('format'))}</span><select class="select" id="nl-type">${['Post', 'Reel / Video', 'Image / Ad', 'Story'].map((p) => `<option value="${p}">${esc(tv('postType', p))}</option>`).join('')}</select></label></div>
         <div class="grid-2"><label class="field"><span class="req">${esc(t('storeName'))}</span><input class="input" id="nl-store" dir="auto" placeholder="Karakou El Bahdja…"></label>
           <label class="field"><span>${esc(t('handle'))}</span><input class="input" id="nl-handle" dir="ltr" placeholder="@boutique"></label></div>
-        <div class="grid-2"><label class="field"><span>${esc(t('category'))}</span><select class="select" id="nl-cat">${C.CATEGORIES.map((c) => `<option value="${c}">${esc(tv('category', c))}</option>`).join('')}</select></label>
+        <div class="grid-2"><label class="field"><span>${esc(t('category'))}</span><select class="select" id="nl-cat">${catOptions('').map(([c, n]) => `<option value="${esc(c)}">${esc(n)}</option>`).join('')}</select></label>
           <label class="field"><span>${esc(t('salesModel'))}</span><select class="select" id="nl-st">${C.STORE_TYPES.map((s) => `<option value="${s}">${esc(tv('storeType', s))}</option>`).join('')}</select></label></div>
         <div class="grid-2"><label class="field"><span>${esc(t('wilayaDispatch'))}</span><select class="select" id="nl-wilaya"><option value="">— ${esc(t('wilayaUnconfirmed'))}</option>${C.WILAYAS.map((w) => `<option value="${w.code}" ${!isSup() && S.agency && S.agency.wilayaCode === w.code ? 'selected' : ''}>${w.code} - ${esc(S.lang === 'ar' ? w.ar : w.fr)}</option>`).join('')}</select></label>
           <label class="field"><span>${esc(t('city'))}</span><input class="input" id="nl-city" placeholder="Bab Ezzouar, Akid Lotfi…"></label></div>
@@ -832,7 +1044,7 @@
   /* ---------------- lead drawer ---------------- */
   let drawerRef = null;
   function openLead(id) {
-    S.openLeadId = id; S.drawerTab = S.drawerTab || 'contact';
+    S.openLeadId = id; S.drawerTab = S.drawerTab || 'prospect';
     const root = $('#modal-root');
     if (drawerRef) drawerRef.remove();
     drawerRef = document.createElement('div');
@@ -867,11 +1079,12 @@
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="plat plat-${esc(l.platform)}">${esc(tv('platform', l.platform))}</span><span style="color:var(--muted);font-size:12.5px" dir="auto">${esc(l.handle)}</span>
               ${isPrio(l) ? `<span class="chip chip-red">${ic('flame')}${esc(t('kpi_hot'))}</span>` : ''}${l.wilayaConfirmed ? `<span class="chip chip-green">${ic('pin')}${esc(wShort(l.wilayaCode))}</span>` : `<span class="chip chip-yellow">${ic('pin')}${esc(t('wilayaDispatch'))} ${esc(t('wilayaUnconfirmed'))}</span>`}</div>
             <h2 dir="auto">${esc(l.storeName)}</h2>
-            <small style="color:var(--muted)">${esc(t('discovered'))} ${esc(fmtDate(l.discoveredAt))} · ${esc(t('updated'))} ${esc(fmtDate(l.updatedAt, true))}${ag ? ' · ' + esc(ag.name) : ''}</small></div>
+            <small style="color:var(--muted)">${esc(t('discovered'))} ${esc(fmtDate(l.discoveredAt))} · ${esc(t('updated'))} ${esc(fmtDate(l.updatedAt, true))}${ag ? ' · ' + esc(ag.name) : ''}</small>
+            <div class="drawer-badges">${tierChip(l)}${waChip(l)}${l.city ? `<span class="chip">${ic('pin')}${esc(l.city)}</span>` : ''}${(l.tags || []).map((x) => `<span class="chip chip-dark">${esc(x)}</span>`).join('')}</div></div>
           <div class="tools">
-            ${l.phonePrimary ? `<button class="btn btn-sm btn-wa" data-action="pitch" data-id="${l.id}">${ic('wa')} <span class="hide-sm">WhatsApp</span></button><a class="btn btn-sm btn-icon" href="tel:${esc(l.phonePrimary)}" title="${esc(C.formatPhone(l.phonePrimary))}">${ic('phone')}</a>` : ''}
             <button class="btn btn-sm btn-icon btn-danger" data-action="delete-lead" data-id="${l.id}" title="${esc(t('deleteLead'))}">${ic('trash')}</button>
             <button class="btn btn-sm btn-icon" data-action="close-lead" title="${esc(t('close'))}">${ic('x')}</button></div></div>
+        ${contactButtons(l, false) ? `<div class="contact-bar">${contactButtons(l, false)}</div>` : ''}
         <div class="drawer-meta">
           ${isSup() ? `<label class="field"><span>${esc(t('hub'))}</span><select class="select" data-field="ownerId">${assignOptions(l.ownerId)}</select></label>` : `<label class="field"><span>${esc(t('hub'))}</span><input class="input" value="${esc(userName(l.ownerId))}" disabled></label>`}
           ${fieldSelect(l, 'stage', t('stage'), C.STAGE_IDS.map((s) => [s, tv('stage', s)]))}
@@ -879,11 +1092,44 @@
           <label class="field"><span>${esc(t('followUp'))}${isOverdue(l) ? ` <b style="color:var(--red)">· ${esc(t('overdue'))}</b>` : isDue(l) ? ` <b style="color:var(--yellow-ink)">· ${esc(t('today'))}</b>` : ''}</span><input class="input" type="date" data-field="nextFollowUpDate" value="${esc(l.nextFollowUpDate || '')}"></label>
         </div>
       </div>
-      <div class="tabs" role="tablist">${[['contact', t('tab_contact')], ['needs', t('tab_needs')], ['post', t('tab_post')], ['journal', `${t('tab_journal')} (${interactions})`]].map(([k, n]) => `<button class="tab ${S.drawerTab === k ? 'on' : ''}" data-tab="${k}" role="tab">${esc(n)}</button>`).join('')}</div>
+      <div class="tabs" role="tablist">${[['prospect', t('tab_prospect')], ['contact', t('tab_contact')], ['needs', t('tab_needs')], ['post', t('tab_post')], ['journal', `${t('tab_journal')} (${interactions})`]].map(([k, n]) => `<button class="tab ${S.drawerTab === k ? 'on' : ''}" data-tab="${k}" role="tab">${esc(n)}</button>`).join('')}</div>
       <div class="drawer-b">${drawerTab(l)}</div>`;
     $('.drawer-b', d).scrollTop = scroll;
   }
   function drawerTab(l) {
+    if (S.drawerTab === 'prospect') {
+      const so = C.socialLinks(l);
+      const src = typeof l.score === 'number' ? (l.scoreSource || 'manual') : 'auto';
+      const attempts = C.contactNotes(l).length, last = C.lastContactAt(l);
+      const link = (u) => u ? `<a class="btn btn-icon" href="${esc(u)}" target="_blank" rel="noopener noreferrer" title="${esc(t('open'))}">${ic('ext')}</a>` : '';
+      const urlField = (key, label) => `<label class="field"><span>${esc(label)}</span><div class="input-link"><input class="input" data-field="${key}" dir="ltr" value="${esc(l[key] || '')}" placeholder="https://…">${link(l[key])}</div></label>`;
+      return `
+      <div class="section"><div class="section-t">${esc(t('scorePriority'))}</div>
+        <div class="score-box">${tierChip(l)}<div><b>${esc(t('tier_' + tierOf(l)))}</b><br><small class="hint">${esc(t('scoreSrc_' + src))} · A ≥ ${S.settings.scoring.aMin}, B ≥ ${S.settings.scoring.bMin}</small></div>
+          <label class="field" style="margin-inline-start:auto;max-width:150px"><span>${esc(t('scoreManual'))}</span><input class="input num" type="number" min="0" max="100" data-field="score" value="${typeof l.score === 'number' ? l.score : ''}" placeholder="${esc(t('auto'))} ${C.autoScore(l, S.settings)}"></label></div>
+        ${typeof l.score === 'number' ? `<small class="hint">${esc(t('autoScoreIs'))} ${C.autoScore(l, S.settings)}/100. ${esc(t('clearToAuto'))}</small>` : ''}</div>
+      <div class="section"><div class="section-t">${esc(t('contactInfo'))}</div>
+        <div class="grid-2">${fieldInput(l, 'phonePrimary', t('phoneSimple'), { phone: true, ph: '+213 5 50 00 00 00' })}
+          ${fieldSelect(l, 'whatsappStatus', t('waStatus'), [['', t('waNone')], ['unverified', t('waToVerify')], ['confirmed', t('waConfirmed')]])}</div>
+        ${l.whatsappStatus !== 'confirmed' && l.phonePrimary ? `<small class="hint">${esc(t('waToVerifyHelp'))}</small>` : ''}
+        <div class="grid-2">${fieldInput(l, 'ownerName', t('ownerPublic'), { ph: t('notAvailable') })}${fieldInput(l, 'city', t('pf_commune'))}</div>
+        ${fieldInput(l, 'address', t('address'))}</div>
+      <div class="section"><div class="section-t">${esc(t('socialOnline'))}</div>
+        <div class="grid-3">${urlField('facebookUrl', 'Facebook')}${urlField('instagramUrl', 'Instagram')}${urlField('tiktokUrl', 'TikTok')}</div>
+        <div class="grid-3"><label class="check"><input type="checkbox" data-field="sellsOnline" ${l.sellsOnline ? 'checked' : ''}><span>${esc(t('sellsOnline'))}</span></label>
+          <label class="check"><input type="checkbox" data-field="open7" ${l.open7 ? 'checked' : ''}><span>${esc(t('open7'))}</span></label>
+          ${fieldInput(l, 'googleReviews', t('googleReviews'), { type: 'number', ltr: true })}</div>
+        ${!so.facebook && !so.instagram && !so.tiktok ? `<small class="hint">${esc(t('noSocial'))}</small>` : ''}</div>
+      <div class="section"><div class="section-t">${esc(t('activitySource'))}</div>
+        <div class="grid-2">${fieldSelect(l, 'category', t('category'), catOptions(l.category))}${fieldInput(l, 'productType', t('productType'))}</div>
+        ${fieldInput(l, 'activityIndex', t('activityIndex'))}
+        <div class="grid-2">${urlField('sourceUrl', t('source'))}${urlField('sourceUrl2', t('source2'))}</div>
+        <label class="field"><span>${esc(t('remarks'))}</span><textarea class="textarea" data-field="remarks" dir="auto" style="min-height:64px">${esc(l.remarks || '')}</textarea></label></div>
+      <div class="section"><div class="section-t">${esc(t('followTitle'))}</div>
+        <div class="grid-3"><div class="stat-mini"><span>${esc(t('attempts'))}</span><b class="num">${attempts}</b></div><div class="stat-mini"><span>${esc(t('lastContact'))}</span><b>${esc(last ? fmtDate(last, true) : '—')}</b></div><div class="stat-mini"><span>${esc(t('nextContact'))}</span><b>${esc(l.nextFollowUpDate ? fmtDate(l.nextFollowUpDate) : '—')}</b></div></div>
+        ${l.stage === 'LOST' || l.refusalReason ? fieldInput(l, 'refusalReason', t('refusalReason'), { ph: t('refusalPh') }) : ''}
+        <button class="btn btn-sm" data-tab="journal" style="justify-self:start">${ic('note')} ${esc(t('logCall'))}</button></div>`;
+    }
     if (S.drawerTab === 'contact') return `
       <div class="section"><div class="section-t">${esc(t('modelLocation'))}</div>
         <div class="grid-2">${fieldSelect(l, 'storeType', t('salesModel'), C.STORE_TYPES.map((s) => [s, tv('storeType', s)]))}
@@ -907,7 +1153,7 @@
       <div class="section"><div class="section-t">${esc(t('originPost'))}${l.postUrl ? `<a class="btn btn-sm" href="${esc(l.postUrl)}" target="_blank" rel="noopener noreferrer">${esc(t('openPost'))} ${ic('ext')}</a>` : ''}</div>
         ${l.postImageUrl ? `<img src="${esc(l.postImageUrl)}" alt="" referrerpolicy="no-referrer" style="max-height:260px;object-fit:contain;border-radius:8px;background:var(--grey-light)">` : ''}
         <label class="field"><span>${esc(t('caption'))}</span><textarea class="textarea" data-field="postCaption" dir="auto">${esc(l.postCaption)}</textarea></label>
-        <div class="grid-2">${fieldSelect(l, 'category', t('category'), C.CATEGORIES.map((c) => [c, tv('category', c)]))}${fieldSelect(l, 'postType', t('format'), ['Post', 'Reel / Video', 'Image / Ad', 'Story'].map((p) => [p, tv('postType', p)]))}</div>
+        <div class="grid-2">${fieldSelect(l, 'category', t('category'), catOptions(l.category))}${fieldSelect(l, 'postType', t('format'), ['Post', 'Reel / Video', 'Image / Ad', 'Story'].map((p) => [p, tv('postType', p)]))}</div>
         <div class="grid-2">${fieldSelect(l, 'platform', t('platform'), C.PLATFORMS.map((p) => [p, tv('platform', p)]))}${fieldInput(l, 'handle', t('handle'), { ltr: true })}</div>
         ${fieldInput(l, 'storeName', t('storeName'))}
         <div class="grid-2">${fieldInput(l, 'postUrl', t('postUrl'), { ltr: true })}${fieldInput(l, 'profileUrl', t('profileUrl'), { ltr: true })}</div>
@@ -916,9 +1162,10 @@
     const icFor = (n) => n.kind === 'system' ? 'cog' : ({ WhatsApp: 'wa', 'Phone Call': 'phone', 'Store Visit': 'pin', 'Internal Note': 'note' }[n.channel] || 'note');
     return `
       <form class="section" id="note-form" novalidate><div class="grid-3">
-          ${`<label class="field"><span>${esc(t('channel'))}</span><select class="select" id="n-channel">${C.CHANNELS.map((c) => `<option value="${c}">${esc(tv('channel', c))}</option>`).join('')}</select></label>`}
+          ${`<label class="field"><span>${esc(t('channel'))}</span><select class="select" id="n-channel">${C.CHANNELS.map((c) => `<option value="${c}" ${S.notePreset === c ? 'selected' : ''}>${esc(tv('channel', c))}</option>`).join('')}</select></label>`}
           ${`<label class="field"><span>${esc(t('outcome'))}</span><select class="select" id="n-outcome">${C.OUTCOMES.map((o) => `<option value="${o}">${esc(tv('outcome', o))}</option>`).join('')}</select></label>`}
           <label class="field"><span>${esc(t('nextFollowUpOpt'))}</span><input class="input" type="date" id="n-follow" min="${S.today}"></label></div>
+        <label class="field" id="n-refusal-wrap" hidden><span>${esc(t('refusalReason'))}</span><input class="input" id="n-refusal" dir="auto" placeholder="${esc(t('refusalPh'))}"></label>
         <textarea class="textarea" id="n-content" dir="auto" placeholder="${esc(t('noteSummary'))}" style="min-height:76px"></textarea>
         <div style="display:flex;justify-content:flex-end"><button class="btn btn-primary" type="submit">${ic('check')} ${esc(t('addInteraction'))}</button></div></form>
       <div class="timeline">${l.notes.length ? l.notes.map((n) => `<div class="tl-item ${n.kind === 'system' ? 'sys' : 'int'}"><div class="tl-ico">${ic(icFor(n))}</div><div class="tl-body">
@@ -926,7 +1173,7 @@
         <p dir="auto">${esc(n.kind === 'system' ? sysText(n.content) : n.content)}</p></div></div>`).join('') : `<div class="empty">${esc(t('noNotes'))}</div>`}</div>`;
   }
   // Render system-note stage codes with human labels
-  const sysText = (s) => String(s).replace(/\b(NEW_DISCOVERED|ENRICHED|CONTACTED|INTERESTED|MEETING_SCHEDULED|TRIAL_DELIVERY|WON_EXPEDITEUR|LOST)\b/g, (m) => tv('stage', m)).replace(/\b(high|medium|low)\b/g, (m) => tv('priority', m));
+  const sysText = (s) => String(s).replace(new RegExp('\\b(' + C.STAGE_IDS.join('|') + ')\\b', 'g'), (m) => tv('stage', m)).replace(/\b(high|medium|low)\b/g, (m) => tv('priority', m));
 
   // Field changes in the drawer → PATCH
   let fieldTimers = {};
@@ -974,14 +1221,23 @@
       { id: 'trial', name: 'عرض تجريبي: 3 طرود مجانية', body: (n) => `مرحباً ${n} 🎉\n\nلتجربة سرعة SAME X DELIVERY نقدم لكم 3 طرود مجانية نحو الولايات التي تختارونها، بدون التزام.\n\nهل لديكم طلبيات جاهزة اليوم؟ نرسل موزعاً للاستلام بعد الظهر. 📦` },
     ],
   };
+  /* Algerian Arabic (darja) and French prospecting messages — the store name is inserted automatically */
+  const DARJA = [
+    { id: 'dz-intro', name: 'Darja — WhatsApp 1er contact', body: (n) => `السلام عليكم، كي راك/راكي؟ 👋\nمعاك [الاسم] من SAME X DELIVERY، شركة توصيل 🚚\nشفت الصفحة تاع ${n} وعجبني الشغل تاعكم، ماشاء الله.\n\nاحنا نخدمو مع التجار اللي يبيعو أونلاين:\n✅ نجيو نهزو الطرود من عندكم (ramassage)\n✅ توصيل للدار ولا للبيرو\n✅ الخلاص عند الاستلام، ونرجعولكم دراهمكم في الوقت\n✅ تتبعو كل طرد\n\nتحب نبعثلك الأسعار ونشوفو واش يناسبك؟ ولا نجيك للمحل نهدرو 5 دقايق؟\nيعطيك الصحة 🙏` },
+    { id: 'dz-relance', name: 'Darja — relance (J+3)', body: (n) => `السلام عليكم ${n}، [اسمك] من SAME X DELIVERY مرة أخرى 😊\nحبيت غير نتأكد بلي وصلك الميساج. إذا تحب نجربو مع بعض بـ 2 ولا 3 طرود باش تشوف الخدمة بعينك.\nقولي واش الوقت اللي يناسبك ونجيك. بالتوفيق!` },
+    { id: 'dz-fb', name: 'Darja — Facebook / Messenger', body: (n) => `السلام عليكم 👋 تبارك الله على صفحة ${n}!\nأنا [الاسم] من SAME X DELIVERY. نوصلو الطلبيات تاع التجار للدار ولا للمكتب، نجيو نهزو الطرود من عندكم، والخلاص عند الاستلام.\nإذا تحبو، نبعثلكم الأسعار والمعلومات في الواتساب. واش هو الرقم اللي نتواصلو بيه؟` },
+    { id: 'fr-fb', name: 'Français — Facebook / Messenger', body: (n) => `Bonjour ${n} 👋 Bravo pour votre page !\nJe suis [Prénom], de SAME X DELIVERY. Nous livrons les commandes des e-commerçants à domicile ou au bureau, avec ramassage chez vous et paiement à la livraison.\nPuis-je vous envoyer nos tarifs sur WhatsApp ? Quel numéro utiliser ?` },
+  ];
   function pitchModal(l) {
-    const list = PITCHES[S.lang] || PITCHES.fr;
-    const name = l.ownerName || l.storeName;
+    const list = [...(PITCHES[S.lang] || PITCHES.fr), ...DARJA];
+    const name = l.storeName;
     const city = l.city || wShort(l.wilayaCode);
     const m = openModal(`
       <div class="modal-h"><h2>${esc(t('pitchTitle'))}</h2><button class="btn btn-ghost btn-icon" data-close>${ic('x')}</button></div>
       <div class="modal-b">
-        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><b dir="auto">${esc(l.storeName)}</b>${l.phonePrimary ? `<span class="chip chip-green num" dir="ltr">${esc(C.formatPhone(l.phonePrimary))}</span>` : `<span class="chip chip-red">${esc(t('phoneRequired'))}</span>`}</div>
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><b dir="auto">${esc(l.storeName)}</b>${l.phonePrimary ? `<span class="chip ${l.whatsappStatus === 'confirmed' ? 'chip-green' : 'chip-yellow'} num" dir="ltr">${esc(C.formatPhone(l.phonePrimary))}</span>` : `<span class="chip chip-red">${esc(t('phoneRequired'))}</span>`}</div>
+        ${l.phonePrimary && l.whatsappStatus !== 'confirmed' ? `<div class="form-error" style="background:var(--yellow-soft);color:var(--yellow-ink);border-color:var(--yellow-line)">${esc(t('waWarn'))}</div>` : ''}
+        <p class="hint" style="margin:0">${esc(t('noAutoSend'))}</p>
         <label class="field"><span>${esc(t('template'))}</span><select class="select" id="p-tpl">${list.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></label>
         <label class="field"><span>${esc(t('message'))}</span><textarea class="textarea pitch-box" id="p-msg" dir="auto"></textarea></label>
       </div>
@@ -1006,21 +1262,46 @@
   }
 
   /* ---------------- import / export / password ---------------- */
-  function exportFile(format) { window.location.href = `/api/export?format=${format}&${filterQuery()}`; }
-  function importModal() {
-    const m = openModal(`<div class="modal-h"><h2>${esc(t('importTitle'))}</h2><button class="btn btn-ghost btn-icon" data-close>${ic('x')}</button></div>
-      <div class="modal-b"><p class="hint" style="margin:0;line-height:1.5">${esc(t('importText'))}</p>
+  /** Export with the current filters (or only `extra` when `only` is set: selection by ids). */
+  function exportFile(format, extra = '', only = false) { window.location.href = `/api/export?format=${format}&${only ? extra : [filterQuery(), extra].filter(Boolean).join('&')}`; }
+  function copyText(text) {
+    const done = () => toast(t('copied') + ' : ' + text, 'ok');
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => toast(t('copyFallback')));
+    else toast(t('copyFallback'));
+  }
+  function renderShellKeepContent() { const f = $('#filters'); if (f) f.innerHTML = filterSelects(); renderContent(); }
+  function toBase64(buf) { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
+  function importModal({ xlsxOnly } = {}) {
+    const m = openModal(`<div class="modal-h"><h2>${esc(xlsxOnly ? t('importExcel') : t('importTitle'))}</h2><button class="btn btn-ghost btn-icon" data-close>${ic('x')}</button></div>
+      <div class="modal-b"><p class="hint" style="margin:0;line-height:1.5">${esc(xlsxOnly ? t('importXlsxText') : t('importText') + (isSup() ? ' ' + t('importXlsxShort') : ''))}</p>
         <div class="form-error" id="im-err" hidden></div>
-        <label class="field"><span>${esc(t('chooseFile'))}</span><input class="input" type="file" id="im-file" accept=".csv,.json,text/csv,application/json" style="padding-top:7px"></label>
+        <label class="field"><span>${esc(t('chooseFile'))}</span><input class="input" type="file" id="im-file" accept="${xlsxOnly ? '.xlsx' : isSup() ? '.xlsx,.csv,.json,text/csv,application/json' : '.csv,.json,text/csv,application/json'}" style="padding-top:7px"></label>
+        ${isSup() ? `<label class="field" id="im-wilaya-wrap" ${xlsxOnly ? '' : 'hidden'}><span>${esc(t('importWilaya'))}</span><select class="select" id="im-wilaya"><option value="">— ${esc(t('wilayaUnconfirmed'))}</option>${C.WILAYAS.map((w) => `<option value="${w.code}">${w.code} - ${esc(S.lang === 'ar' ? w.ar : w.fr)}</option>`).join('')}</select><small class="hint">${esc(t('importWilayaHint'))}</small></label>` : ''}
         ${isSup() ? `<label class="field"><span>${esc(t('importTarget'))}</span><select class="select" id="im-owner">${assignOptions(S.user.id)}</select></label>` : ''}
         <label class="check"><input type="checkbox" id="im-dup" checked><span>${esc(t('skipDup'))}</span></label>
         ${isSup() ? `<p class="hint" style="margin:0;line-height:1.5;background:var(--grey-light);padding:10px;border-radius:8px">${esc(t('legacyHelp'))}</p>` : ''}
       </div>
       <div class="modal-f"><button class="btn" data-close>${esc(t('cancel'))}</button><button class="btn btn-primary" id="im-go">${ic('up')} ${esc(t('import'))}</button></div>`);
+    $('#im-file', m.el).addEventListener('change', (e) => {
+      const f = e.target.files[0]; const w = $('#im-wilaya-wrap', m.el); if (!f || !w) return;
+      w.hidden = !/\.xlsx$/i.test(f.name);
+      if (/batna/i.test(f.name) && !$('#im-wilaya', m.el).value) $('#im-wilaya', m.el).value = '05';
+    });
     $('#im-go', m.el).addEventListener('click', async () => {
       const f = $('#im-file', m.el).files[0];
       const err = $('#im-err', m.el); err.hidden = true;
       if (!f) { err.textContent = t('chooseFile'); err.hidden = false; return; }
+      if (/\.xlsx$/i.test(f.name)) {
+        if (!isSup()) { err.textContent = t('err_forbidden'); err.hidden = false; return; }
+        if (f.size > 4 * 1024 * 1024) { err.textContent = t('err_payload_too_large'); err.hidden = false; return; }
+        const btn = $('#im-go', m.el); btn.disabled = true; btn.textContent = t('importing');
+        try {
+          const r = await api('POST', '/api/import', { xlsx: toBase64(await f.arrayBuffer()), wilayaCode: $('#im-wilaya', m.el).value, ownerId: $('#im-owner', m.el).value });
+          m.close(); await refreshLeads(true); importReport(r, f.name); renderContent();
+        } catch (e) { err.textContent = errMsg(e); err.hidden = false; btn.disabled = false; btn.textContent = t('import'); }
+        return;
+      }
+      if (xlsxOnly) { err.textContent = t('err_xlsx_invalid'); err.hidden = false; return; }
       const text = await f.text();
       let body;
       if (/\.csv$/i.test(f.name) || f.type === 'text/csv') body = { csv: text };
@@ -1034,6 +1315,17 @@
         await refreshLeads(true); renderContent();
       } catch (e) { err.textContent = errMsg(e); err.hidden = false; btn.disabled = false; }
     });
+  }
+  function importReport(r, fileName) {
+    const rep = r.report || {};
+    const row = (k, v) => `<div class="sb-row" style="color:var(--muted)"><span>${esc(k)}</span><strong style="color:var(--black)" class="num">${v}</strong></div>`;
+    openModal(`<div class="modal-h"><h2>${esc(t('importDone'))}</h2><button class="btn btn-ghost btn-icon" data-close>${ic('x')}</button></div>
+      <div class="modal-b"><p style="margin:0"><b>${esc(fileName)}</b> — ${esc(t('mainSheet'))} « ${esc(rep.mainSheet || '')} »</p>
+        <div style="display:grid;gap:8px">${row(t('imCreated'), r.created)}${row(t('imUpdated'), r.updated)}${row(t('imUnchanged'), r.unchanged)}${row(t('imInvalid'), r.invalid)}${row(t('imTotal'), r.total)}
+          ${rep.enrich ? `${rep.enrich.top50 !== undefined ? row('Top 50', rep.enrich.top50) : ''}${rep.enrich.whatsapp !== undefined ? row('WhatsApp', rep.enrich.whatsapp) : ''}${rep.enrich.social !== undefined ? row('Actifs FB-IG', rep.enrich.social) : ''}` : ''}</div>
+        ${rep.warnings && rep.warnings.length ? `<div class="form-error">${rep.warnings.map(esc).join('<br>')}</div>` : `<div class="chip chip-green" style="height:auto;padding:6px 10px;white-space:normal">${esc(t('imChecks'))}</div>`}
+        <small class="hint">${esc(t('imRollback'))}</small></div>
+      <div class="modal-f"><button class="btn btn-primary" data-close>${esc(t('close'))}</button></div>`);
   }
   function passwordModal() {
     const m = openModal(`<form id="pw-form" novalidate><div class="modal-h"><h2>${esc(t('changePassword'))}</h2><button type="button" class="btn btn-ghost btn-icon" data-close>${ic('x')}</button></div>
@@ -1072,6 +1364,11 @@
     }
     if (drawerRef && drawerRef.contains(el) && (el.dataset.field || el.dataset.pain)) return onDrawerField(el);
     if (el.dataset.stageSelect) { const l = S.leads.find((x) => x.id === el.dataset.stageSelect); if (l) changeStage(l, el.value); return; }
+    if (el.matches('[data-psortsel]')) { S.prospectSort = el.value; store.set('prospectSort', el.value); S.page = 1; renderContent(); return; }
+    if (el.matches('[data-pagesize]')) { S.pageSize = Number(el.value) || 50; S.page = 1; renderContent(); return; }
+    if (el.dataset.pnum) { const v = el.value === '' ? '' : String(Math.max(0, Math.min(100, Number(el.value) || 0))); S.filters[el.dataset.pnum] = v; S.page = 1; renderContent(); return; }
+    if (el.dataset.dl && el.value) { const v = el.value; el.value = ''; exportFile('xlsx', `${el.dataset.dl}=${encodeURIComponent(v)}`); return; }
+    if (el.id === 'n-outcome') { const w = $('#n-refusal-wrap'); if (w) w.hidden = el.value !== 'Not Interested'; return; }
     if (el.dataset.select) { el.checked ? S.selected.add(el.dataset.select) : S.selected.delete(el.dataset.select); renderContent(); return; }
     if (el.dataset.action === 'select-page') {
       const leads = sortLeads(filtered()).slice((S.page - 1) * S.pageSize, S.page * S.pageSize);
@@ -1091,6 +1388,8 @@
     if (!content) { $('#n-content').classList.add('invalid'); toast(t('err_note_required'), 'err'); return; }
     const body = { channel: $('#n-channel').value, outcome: $('#n-outcome').value, content };
     if ($('#n-follow').value) body.nextFollowUpDate = $('#n-follow').value;
+    if (body.outcome === 'Not Interested' && $('#n-refusal').value.trim()) body.refusalReason = $('#n-refusal').value.trim();
+    S.notePreset = null;
     try {
       const before = l.stage;
       const r = await api('POST', `/api/leads/${l.id}/notes`, body);
@@ -1109,6 +1408,13 @@
     const st = e.target.closest('[data-stage-tab]'); if (st) { S.stageTab = st.dataset.stageTab; renderContent(); return; }
     const sortEl = e.target.closest('[data-sort]'); if (sortEl) { const k = sortEl.dataset.sort; S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : 1 }; renderContent(); return; }
     const pg = e.target.closest('[data-page]'); if (pg && !pg.disabled) { S.page = +pg.dataset.page; renderContent(); $('#content').scrollTop = 0; return; }
+    const pf = e.target.closest('[data-pf]');
+    if (pf) { const k = pf.dataset.pf, v = pf.dataset.val; S.filters[k] = S.filters[k] === v ? DEFAULT_FILTERS[k] : v; S.page = 1; return renderShellKeepContent(); }
+    const pt = e.target.closest('[data-ptoggle]');
+    if (pt) { const k = pt.dataset.ptoggle; S.filters[k] = !S.filters[k]; S.page = 1; return renderShellKeepContent(); }
+    const ps = e.target.closest('[data-psort]'); if (ps) { S.prospectSort = ps.dataset.psort; store.set('prospectSort', S.prospectSort); return renderContent(); }
+    const logEl = e.target.closest('[data-log]');
+    if (logEl) { const id = logEl.dataset.id; S.notePreset = logEl.dataset.log; setTimeout(() => { S.drawerTab = 'journal'; openLead(id); }, 400); return; }
     const qf = e.target.closest('[data-qf]');
     if (qf) { const k = qf.dataset.qf; const v = qf.dataset.val === 'true' ? true : qf.dataset.val; S.filters[k] = S.filters[k] === v ? DEFAULT_FILTERS[k] : v; S.page = 1; renderContent(); return; }
     const act = e.target.closest('[data-action]');
@@ -1131,6 +1437,25 @@
         case 'goto-table-stage': S.filters.stage = act.dataset.stage; return setView('table');
         case 'export': return exportFile(act.dataset.format);
         case 'import': return importModal();
+        case 'import-xlsx': return importModal({ xlsxOnly: true });
+        case 'dl': return exportFile('xlsx', act.dataset.q);
+        case 'export-selection': return exportFile('xlsx', 'ids=' + [...S.selected].join(','), true);
+        case 'copy-phone': if (lead) copyText(C.formatPhone(lead.phonePrimary)); return;
+        case 'save-settings': return saveSettings();
+        case 'add-category': {
+          const tb = $('#cat-table tbody'); if (!tb) return;
+          const tr = document.createElement('tr'); tr.dataset.cat = '';
+          tr.innerHTML = `<td><input class="input" data-k="fr" placeholder="${esc(t('labelFr'))}"></td><td><input class="input" dir="rtl" data-k="ar" placeholder="${esc(t('labelAr'))}"></td><td class="r"><input class="input num" style="width:70px" type="number" min="0" max="100" data-k="weight" value="8"></td><td class="r num">0</td><td><input type="checkbox" data-k="active" checked></td>`;
+          tb.appendChild(tr); $('input', tr).focus(); return;
+        }
+        case 'recalc': {
+          const all = act.dataset.excel === '1';
+          if (!(await confirmDialog(all ? t('recalcAllQ') : t('recalcAutoQ'), { confirmText: t('confirm'), detail: t('recalcSafety') }))) return;
+          if (!(await saveSettings())) return;
+          try { const r = await api('POST', '/api/settings/recalculate-scores', { includeExcel: all }); toast(t('recalcDone', { c: r.changed, n: r.tierChanged, k: r.kept }), 'ok'); await refreshLeads(true); renderContent(); }
+          catch (err) { toast(errMsg(err), 'err'); }
+          return;
+        }
         case 'pitch': if (lead) pitchModal(lead); return;
         case 'move': if (lead) { const i = C.STAGE_IDS.indexOf(lead.stage) + Number(act.dataset.dir); if (i >= 0 && i < C.STAGE_IDS.length) changeStage(lead, C.STAGE_IDS[i]); } return;
         case 'close-lead': return closeLead();

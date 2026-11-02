@@ -202,14 +202,14 @@ const noHash = (obj) => assert(!JSON.stringify(obj).includes('scrypt$'), 'passwo
     assert(txt.includes("'=HYPERLINK")); assert(!txt.includes('Annaba Parfums'), 'agent export leaked other agent data');
     ctx.csv = txt.slice(1);
   });
-  await test('export XLSX is a valid workbook with 3 sheets', async () => {
+  await test('export XLSX is a valid workbook with 4 sheets (prospects, agents, agences, communes)', async () => {
     const r = await sup.get('/api/export?format=xlsx', { raw: true }); assert.strictEqual(r.status, 200);
     const f = path.join(DATA, 'out.xlsx'); fs.writeFileSync(f, r.buf);
     const out = execFileSync('python3', ['-I', '-c', `import zipfile,sys,xml.dom.minidom as m
 z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None
 names=z.namelist(); [m.parseString(z.read(n)) for n in names if n.endswith('.xml') or n.endswith('.rels')]
 wb=z.read('xl/workbook.xml').decode(); print(wb.count('<sheet '), len(z.read('xl/worksheets/sheet1.xml')))`, f]).toString().trim();
-    const [sheets] = out.split(' '); assert.strictEqual(sheets, '3');
+    const [sheets] = out.split(' '); assert.strictEqual(sheets, '4');
     try { const o = execFileSync('python3', ['-I', '-c', 'import openpyxl,sys; wb=openpyxl.load_workbook(sys.argv[1]); ws=wb["Prospects"]; print(ws.max_row, ws["A1"].value)', f]).toString().trim(); assert(o.endsWith('Boutique'), o); } catch (e) { if (!/No module named/.test(String(e.stderr || e))) throw e; }
   });
   await test('import Swift-format JSON: maps fields, extracts phones from notes, dedupes on re-import', async () => {

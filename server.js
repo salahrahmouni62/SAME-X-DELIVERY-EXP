@@ -10,6 +10,7 @@ const auth = require('./lib/auth');
 const L = require('./lib/leads');
 const C = require('./lib/constants');
 const files = require('./lib/files');
+const P = require('./lib/prospects');
 const redis = require('./lib/redis');
 
 const PORT = Number(process.env.PORT || 3000);
@@ -152,6 +153,9 @@ function patchLead(user, lead, input) {
     else if (before.stage === 'WON_EXPEDITEUR') lead.wonAt = '';
   }
   if (body.priority && body.priority !== before.priority) lead.notes.unshift(L.sysNote(user, `Priorité : ${before.priority} → ${body.priority}`));
+  if (body.score !== undefined && body.score !== before.score)
+    lead.notes.unshift(L.sysNote(user, body.score === null ? 'Score : retour au barème automatique' : `Score : ${before.score ?? 'barème'} → ${body.score} (manuel)`));
+  if (body.refusalReason && body.refusalReason !== before.refusalReason) lead.notes.unshift(L.sysNote(user, `Motif de refus : ${body.refusalReason}`));
   if (body.nextFollowUpDate !== undefined && body.nextFollowUpDate !== before.nextFollowUpDate)
     lead.notes.unshift(L.sysNote(user, body.nextFollowUpDate ? `Relance planifiée le ${body.nextFollowUpDate}` : 'Relance retirée'));
   if (body.wilayaConfirmed !== undefined && body.wilayaConfirmed !== before.wilayaConfirmed)
@@ -385,12 +389,13 @@ route('POST', '/api/leads/:id/notes', async (req, res, { user, params, body }) =
   if (!n.content) fail(400, 'note_required');
   l.notes.unshift(n);
   // Interaction outcomes can move the pipeline forward automatically
-  const auto = { 'Interested': 'INTERESTED', 'Needs Price Sheet': 'INTERESTED', 'Agreed on Trial': 'TRIAL_DELIVERY', 'Not Interested': 'LOST' }[n.outcome];
+  const auto = { 'Follow-up Set': 'REPLIED', 'Interested': 'INTERESTED', 'Needs Price Sheet': 'INTERESTED', 'Agreed on Trial': 'TRIAL_DELIVERY', 'Not Interested': 'LOST' }[n.outcome];
   const order = C.STAGE_IDS;
   const patch = {};
   if (n.kind !== 'system' && n.channel !== 'Internal Note' && ['NEW_DISCOVERED', 'ENRICHED'].includes(l.stage)) patch.stage = 'CONTACTED';
   if (auto && body.autoStage !== false && (auto === 'LOST' || order.indexOf(auto) > order.indexOf(patch.stage || l.stage))) patch.stage = auto;
   if (body.nextFollowUpDate !== undefined) patch.nextFollowUpDate = body.nextFollowUpDate;
+  if (n.outcome === 'Not Interested' && body.refusalReason) patch.refusalReason = body.refusalReason;
   if (Object.keys(patch).length) patchLead(user, l, patch); else { touch(l); db.persist(); }
   return l;
 }, { auth: true });
@@ -414,6 +419,46 @@ route('POST', '/api/leads/bulk', async (req, res, { user, body }) => {
 /* --- stats --- */
 route('GET', '/api/stats', (req, res, { user, query }) => L.stats(user, L.applyFilters(L.visibleLeads(user), query)), { auth: true });
 
+/* --- Prospects CRM: settings (categories, scoring), score recalculation, statistics --- */
+route('GET', '/api/settings', () => P.getSettings(), { auth: true });
+route('PATCH', '/api/settings', async (req, res, { user, body }) => {
+  requireSupervisor(user);
+  const before = P.getSettings();
+  let next;
+  try { next = P.cleanSettings(body, before); } catch (e) { fail(400, e.code || 'invalid_settings'); }
+  const saved = P.saveSettings(next, user);
+  const changes = [];
+  for (const k of C.SCORING_KEYS) if (before.scoring[k] !== saved.scoring[k]) changes.push(`${k} ${before.scoring[k]}→${saved.scoring[k]}`);
+  if (before.scoring.homeCommune !== saved.scoring.homeCommune) changes.push(`commune ${before.scoring.homeCommune}→${saved.scoring.homeCommune}`);
+  const added = saved.categories.filter((c) => !before.categories.some((x) => x.id === c.id)).map((c) => c.fr);
+  if (added.length) changes.push('catégories + ' + added.join(', '));
+  audit(user, 'settings_updated', changes.join(' ; ') || 'libellés / catégories');
+  return saved;
+}, { auth: true });
+route('POST', '/api/settings/recalculate-scores', async (req, res, { user, body }) => {
+  requireSupervisor(user);
+  const settings = P.getSettings();
+  await db.snapshot('pre-recalc');
+  let changed = 0, tierChanged = 0, kept = 0;
+  for (const l of db.col('leads')) {
+    if (typeof l.score !== 'number') continue; // already on the automatic barème
+    if (l.scoreSource === 'manual' || (l.scoreSource === 'excel' && body.includeExcel !== true)) { kept++; continue; }
+    const before = l.score, beforeTier = C.tierOf(before, settings);
+    l.score = null; l.scoreSource = '';
+    const after = C.autoScore(l, settings);
+    if (after !== before) { changed++; l.notes.unshift(L.sysNote(user, `Score recalculé avec le barème : ${before} → ${after}`)); }
+    if (C.tierOf(after, settings) !== beforeTier) tierChanged++;
+    touch(l);
+  }
+  db.persist();
+  audit(user, 'scores_recalculated', `${changed} scores modifiés, ${tierChanged} niveaux modifiés, ${kept} conservés (manuels${body.includeExcel ? '' : ' / Excel'})`);
+  return { changed, tierChanged, kept };
+}, { auth: true });
+route('GET', '/api/prospects/stats', (req, res, { user, query }) => {
+  const settings = P.getSettings();
+  return { ...P.prospectStats(L.applyFilters(L.visibleLeads(user), query), settings), thresholds: { aMin: settings.scoring.aMin, bMin: settings.scoring.bMin } };
+}, { auth: true });
+
 /* --- export --- */
 route('GET', '/api/export', (req, res, { user, query }) => {
   const leads = L.applyFilters(L.visibleLeads(user), query);
@@ -428,6 +473,15 @@ route('GET', '/api/export', (req, res, { user, query }) => {
       { name: 'Stats agences', headers: ['Agence', 'Code', 'Wilaya', 'Prospects', 'Numéro vérifié', 'Contactés', 'Gagnés', 'Gagnés ce mois', 'Conversion %', 'Conversion contactés %', 'Relances dues', 'En retard'],
         rows: s.byAgency.map((a) => [a.name || 'Non affecté (national)', a.code, a.wilayaCode || '', a.total, a.enriched, a.contacted, a.won, a.wonThisMonth, a.conversionRate, a.contactedConversionRate, a.dueToday, a.overdue]) },
     ];
+    const settings = P.getSettings();
+    const communes = {};
+    for (const l of leads) {
+      const c = communes[l.city || '—'] = communes[l.city || '—'] || { n: 0, phone: 0, A: 0, B: 0, C: 0, contacted: 0, won: 0 };
+      c.n++; if (l.phonePrimary) c.phone++; c[C.tierOf(C.effectiveScore(l, settings), settings)]++;
+      if (C.CONTACTED_STAGES.includes(l.stage)) c.contacted++; if (l.stage === 'WON_EXPEDITEUR') c.won++;
+    }
+    sheets.push({ name: 'Par commune', headers: ['Commune', 'Prospects', 'Avec téléphone', 'Niveau A', 'Niveau B', 'Niveau C', 'Contactés', 'Clients actifs'],
+      rows: Object.entries(communes).sort((a, b) => b[1].n - a[1].n).map(([k, c]) => [k, c.n, c.phone, c.A, c.B, c.C, c.contacted, c.won]) });
     audit(user, 'export_xlsx', `${leads.length} prospects`);
     return { raw: files.toXLSX(sheets), headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="samex-prospects-${stamp}.xlsx"` } };
   }
@@ -435,8 +489,70 @@ route('GET', '/api/export', (req, res, { user, query }) => {
   return { raw: files.toCSV(L.EXPORT_HEADERS, L.exportRows(leads)), headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="samex-prospects-${stamp}.csv"` } };
 }, { auth: true });
 
-/* --- import (JSON array / Swift export / CSV text) --- */
+/* --- Excel workbook import (prospect file) — supervisor only, no duplicates, re-import updates instead of duplicating --- */
+const MAX_XLSX = 4 * 1024 * 1024;
+async function importWorkbook(user, body) {
+  requireSupervisor(user);
+  const buf = Buffer.from(String(body.xlsx).replace(/^data:[^,]*,/, ''), 'base64');
+  if (!buf.length) fail(400, 'import_format');
+  if (buf.length > MAX_XLSX) fail(413, 'payload_too_large');
+  const wilaya = C.WILAYAS.some((w) => w.code === body.wilayaCode) ? body.wilayaCode : '';
+  let parsed;
+  try { parsed = P.parseProspectWorkbook(buf, { wilayaCode: wilaya }); }
+  catch (e) { if (e.code === 'xlsx_invalid' || e.code === 'xlsx_no_sheet') fail(400, e.code); throw e; }
+  const { records, report } = parsed;
+  if (records.length > 20000) fail(400, 'import_too_large');
+  const target = ownerAndAgency(user, body.ownerId);
+  const settings = P.getSettings();
+  await db.snapshot('pre-import'); // rollback point: Sauvegarde & Données → instantané « pre-import »
+  // Index of every existing merchant (all agencies) so nothing is ever duplicated
+  const bySource = new Map(), byPhone = new Map(), byName = new Map();
+  const index = (l) => {
+    if (l.sourceUrl) bySource.set(l.sourceUrl.toLowerCase(), l);
+    if (l.phonePrimary) byPhone.set(l.phonePrimary, l);
+    byName.set(P.nameKey(l.storeName, l.city), l);
+  };
+  db.col('leads').forEach(index);
+  let created = 0, updated = 0, unchanged = 0, invalid = 0;
+  const FILL = ['ownerName', 'phoneSecondary', 'facebookUrl', 'instagramUrl', 'tiktokUrl', 'address', 'productType', 'activityIndex', 'sourceUrl', 'sourceUrl2', 'remarks', 'googleMapsUrl'];
+  for (const rec of records) {
+    const tags = P.enrichmentTags(rec);
+    const input = { ...rec, category: L.mapCategory(rec.category), tags };
+    const clean = L.cleanLeadFields(input, true);
+    if (!clean.storeName) { invalid++; continue; }
+    const match = (clean.sourceUrl && bySource.get(clean.sourceUrl.toLowerCase())) || (clean.phonePrimary && byPhone.get(clean.phonePrimary)) || byName.get(P.nameKey(clean.storeName, clean.city));
+    if (match) {
+      // Re-import: complete empty fields, refresh the Excel score, never touch stage / owner / notes / edited values
+      const patch = {};
+      for (const k of FILL) if (!match[k] && clean[k]) patch[k] = clean[k];
+      if (!match.phonePrimary && clean.phonePrimary) patch.phonePrimary = clean.phonePrimary;
+      if (!match.whatsappStatus && clean.whatsappStatus) patch.whatsappStatus = clean.whatsappStatus;
+      for (const k of ['sellsOnline', 'open7']) if (match[k] === undefined && clean[k] !== undefined) patch[k] = clean[k];
+      if (!match.googleReviews && clean.googleReviews) patch.googleReviews = clean.googleReviews;
+      if (typeof clean.score === 'number' && (match.scoreSource === 'excel' || typeof match.score !== 'number') && match.score !== clean.score) { patch.score = clean.score; patch.scoreSource = 'excel'; }
+      const newTags = tags.filter((t) => !(match.tags || []).includes(t));
+      if (newTags.length) patch.tags = [...(match.tags || []).filter((t) => !/^Top 50 #/.test(t) || !newTags.some((n) => /^Top 50 #/.test(n))), ...newTags];
+      if (Object.keys(patch).length) {
+        Object.assign(match, patch);
+        match.notes.unshift(L.sysNote(user, `Mis à jour par l’import Excel (${Object.keys(patch).join(', ')}).`));
+        touch(match); updated++;
+      } else unchanged++;
+      continue;
+    }
+    const tier = C.tierOf(C.effectiveScore(clean, settings), settings);
+    const notes = [L.sysNote(user, `Importé depuis le fichier Excel (feuille « ${report.mainSheet} », ligne ${rec.__row}) par ${user.name}.`)];
+    if (rec.priorityReason) notes.unshift(L.note(user, { channel: 'Internal Note', outcome: 'Note', content: `Top 50 #${rec.top50Rank} — ${rec.priorityReason}` }));
+    const lead = createLead(user, { ...input, priority: clean.priority || { A: 'high', B: 'medium', C: 'low' }[tier], ownerId: target.ownerId }, { notes });
+    index(lead); created++;
+  }
+  db.persist();
+  audit(user, 'import_xlsx', `${report.mainSheet} : ${created} créés, ${updated} complétés, ${unchanged} déjà à jour, ${invalid} invalides`);
+  return { created, updated, unchanged, invalid, skipped: updated + unchanged, total: records.length, report };
+}
+
+/* --- import (JSON array / Swift export / CSV text / Excel workbook) --- */
 route('POST', '/api/import', async (req, res, { user, body }) => {
+  if (typeof body.xlsx === 'string') return importWorkbook(user, body);
   let records = [];
   if (typeof body.csv === 'string') records = files.parseCSV(body.csv).map(L.rowFromCSV);
   else if (Array.isArray(body.records)) records = body.records;
@@ -465,7 +581,7 @@ route('POST', '/api/import', async (req, res, { user, body }) => {
 route('GET', '/api/backup', (req, res, { user }) => {
   requireSupervisor(user);
   const data = { app: 'samex-delivery-crm', version: 1, createdAt: new Date().toISOString(), createdBy: user.name,
-    agencies: db.col('agencies'), users: db.col('users'), leads: db.col('leads') };
+    agencies: db.col('agencies'), users: db.col('users'), leads: db.col('leads'), settings: db.get('meta', 'settings') || null };
   audit(user, 'backup_downloaded');
   return { raw: JSON.stringify(data, null, 1), headers: { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="samex-backup-${L.today()}.json"` } };
 }, { auth: true });
@@ -491,6 +607,7 @@ async function restore(user, data, mode) {
     return { mode, added, loggedOut: false };
   }
   db.replaceAll(data);
+  if (data.settings && typeof data.settings === 'object') { try { P.saveSettings(P.cleanSettings(data.settings, P.getSettings()), user); } catch {} }
   audit(user, 'restore_replace', `${data.leads.length} prospects`);
   return { mode: 'replace', leads: data.leads.length, loggedOut: true };
 }
