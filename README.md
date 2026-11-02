@@ -32,6 +32,24 @@ En local (http, sans HTTPS) : `COOKIE_SECURE=false node server.js`.
 - **Sauvegarde & restauration** : téléchargement complet, restauration (remplacer ou fusionner), instantané automatique quotidien (30 conservés), instantané de sécurité avant chaque restauration.
 - **Journal d'audit** : connexions, échecs, créations, désactivations, exports, imports, restaurations.
 
+## Prospects & CRM (base des commerçants)
+
+Menu **Prospects & CRM** : tableau de bord (10 indicateurs calculés depuis la base), priorité A / B / C, répartition par commune et par activité, suivi commercial,
+recherche et filtres (commune, activité, priorité, score, statut, WhatsApp, Facebook / Instagram / TikTok, vente en ligne, téléphone, contact, responsable),
+tri (score, téléphone, WhatsApp, réseaux, vente en ligne, commune), sélection multiple (statut, responsable, export) et pagination.
+
+- **Import Excel** (superviseur) : bouton *Importer Excel*. Feuille source « Base complète » ; « Top 50 », « WhatsApp » et « Actifs FB-IG » complètent les mêmes
+  commerçants, « Par commune » sert de contrôle. Doublons détectés par téléphone, lien source ou nom + commune : réimporter ne crée rien, les champs vides sont complétés.
+  Un instantané « pre-import » est pris avant chaque import (retour arrière : *Sauvegarde & Données*). Le fichier réel n'est jamais versionné (`test/fixtures/*.xlsx`).
+- **Score /100** : le score du fichier est conservé tel quel. Le barème (onglet *Paramètres CRM*) reproduit exactement les scores du fichier ; il sert aux nouveaux
+  commerçants et au recalcul, qui ne touche jamais les scores saisis à la main. Seuils A / B modifiables.
+- **Fiche commerçant** : onglet *Prospect & score* (score, WhatsApp « À vérifier » / confirmé, réseaux, source, remarques, tentatives, dernier contact, motif de refus),
+  boutons Appeler / WhatsApp / Messenger / Instagram / TikTok / Copier le numéro, messages prêts en darja et en français avec le nom du magasin (aucun envoi automatique).
+- **Statuts** : Nouveau prospect, À contacter, Contacté, Réponse reçue, Intéressé, Négociation, Rendez-vous / visite, Colis tests, Client actif, À relancer, Refusé.
+- **Exports** : Excel / CSV selon les filtres, liste d'une commune, par priorité, commerçants avec téléphone, sélection.
+- Les données sont des prospects ordinaires (même collection, mêmes droits : un agent ne voit que ses commerçants). Champs ajoutés sans migration destructive :
+  les anciennes données restent valides.
+
 ## Configuration (variables d'environnement)
 
 | Variable | Défaut | Rôle |
@@ -85,6 +103,9 @@ node test/prod.test.js    # 11 tests en mode production : code d'initialisation,
 node test/redis.test.js   # 13 tests du mode Redis : deux instances, écritures simultanées, blocage partagé, instantanés, panne Redis, point d'entrée Vercel
 node test/storage-config.test.js # 14 tests : détection et validation des variables Upstash (noms, préfixes, valeurs mal collées, URL TCP), sans fuite de secret
 node test/vercel-check.js # contrôle de déploiement Vercel : imports résolus, fichiers publiés, démarrage de la copie publiée
+node test/prospects.test.js # 22 tests Prospects & CRM : import Excel (144), doublons, scores, filtres, statuts, droits, exports, persistance (fichier + Redis)
+node test/e2e-prospects.js  # 16 tests dans Chromium : import par l’interface, filtres, fiche, messages, paramètres, arabe, mobile, agent
+npm run check             # toute la suite avant publication
 bash test/update.test.sh  # 8 tests de mise à jour avec retour arrière automatique (root, environnement jetable)
 ```
 
@@ -98,6 +119,8 @@ lib/db.js            base JSON (écriture atomique ou Redis), instantanés
 lib/redis.js         client REST Upstash (mode Vercel)
 lib/leads.js         logique prospects : périmètre, filtres, statistiques, import/export
 lib/files.js         génération CSV / XLSX, lecture CSV
+lib/xlsx-read.js     lecture des fichiers Excel (.xlsx), sans dépendance
+lib/prospects.js     Prospects & CRM : paramètres (activités, barème), import Excel, statistiques
 lib/constants.js     étapes, 58 wilayas, catégories, format +213 (partagé avec le navigateur)
 scripts/admin.js     administration serveur (créer un superviseur, réinitialiser un mot de passe)
 deploy/              installation VPS, sauvegarde, restauration, mise à jour
